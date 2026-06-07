@@ -133,7 +133,7 @@ class SourcesTests extends TestUtil.ScalaCliBuildSuite {
   test("dependencies in .scala - using URL with query parameters") {
     val testInputs = TestInputs(
       os.rel / "something.scala" ->
-        """| //> using file http://github.com/VirtusLab/scala-cli/blob/main/modules/dummy/amm/src/main/scala/AmmDummy.scala?version=3
+        """| //> using file http://github.com/VirtusLab/scala-cli/blob/main/modules/core/src/main/scala/scala/build/internals/Name.scala?version=3
            |
            |object Main {
            |}
@@ -159,7 +159,7 @@ class SourcesTests extends TestUtil.ScalaCliBuildSuite {
 
       expect(sources.paths.length == 1)
       expect(sources.inMemory.length == 1)
-      expect(sources.inMemory.head.generatedRelPath.last == "AmmDummy.scala")
+      expect(sources.inMemory.head.generatedRelPath.last == "Name.scala")
     }
   }
 
@@ -332,6 +332,103 @@ class SourcesTests extends TestUtil.ScalaCliBuildSuite {
       expect(sources.paths.map(_._2) == Seq(path))
       expect(sources.inMemory.isEmpty)
     }
+  }
+
+  /** Asserts that the only Java source produced by `testInputs` is routed to the test scope and is
+    * reachable on disk at `expectedOnDiskPath`.
+    */
+  private def expectJavaFileRoutedToTestScope(
+    testInputs: TestInputs,
+    expectedOnDiskPath: os.RelPath
+  ): Unit =
+    testInputs.withInputs { (root, inputs) =>
+      val (crossSources, _) =
+        CrossSources.forInputs(
+          inputs,
+          preprocessors,
+          TestLogger(),
+          SuppressWarningOptions()
+        ).orThrow
+
+      val scopedSources = crossSources.scopedSources(BuildOptions()).orThrow
+      val mainSources   =
+        scopedSources.sources(
+          Scope.Main,
+          crossSources.sharedOptions(BuildOptions()),
+          root,
+          TestLogger()
+        ).orThrow
+      val testSources =
+        scopedSources.sources(
+          Scope.Test,
+          crossSources.sharedOptions(BuildOptions()),
+          root,
+          TestLogger()
+        ).orThrow
+
+      expect(mainSources.paths.isEmpty)
+      expect(mainSources.inMemory.isEmpty)
+      val onDiskPaths           = testSources.paths.map(_._2)
+      val inMemoryOriginalPaths =
+        testSources.inMemory.flatMap(_.originalPath.toOption.map(_._1: os.SubPath))
+      expect((onDiskPaths ++ inMemoryOriginalPaths.map(os.rel / _)) == Seq(expectedOnDiskPath))
+    }
+
+  private val javaTestPublicClassName: String = "Something"
+  private val javaTestSourceContent: String   =
+    s"""public class $javaTestPublicClassName {
+       |  public int a = 1;
+       |}
+       |""".stripMargin
+
+  test("a .test.java file should be routed to the test scope") {
+    val onDiskPath = os.rel / s"$javaTestPublicClassName.test.java"
+    val testInputs = TestInputs(onDiskPath -> javaTestSourceContent)
+    expectJavaFileRoutedToTestScope(testInputs, onDiskPath)
+  }
+
+  test("a .test.java file's generated path strips the .test infix for javac") {
+    val onDiskPath = os.rel / s"$javaTestPublicClassName.test.java"
+    TestInputs(onDiskPath -> javaTestSourceContent).withInputs { (root, inputs) =>
+      val (crossSources, _) =
+        CrossSources.forInputs(
+          inputs,
+          preprocessors,
+          TestLogger(),
+          SuppressWarningOptions()
+        ).orThrow
+
+      val scopedSources = crossSources.scopedSources(BuildOptions()).orThrow
+      val testSources   =
+        scopedSources.sources(
+          Scope.Test,
+          crossSources.sharedOptions(BuildOptions()),
+          root,
+          TestLogger()
+        ).orThrow
+
+      val expectedGeneratedRelPath = os.rel / s"$javaTestPublicClassName.java"
+      expect(testSources.paths.isEmpty)
+      expect(testSources.inMemory.length == 1)
+      expect(testSources.inMemory.head.generatedRelPath == expectedGeneratedRelPath)
+    }
+  }
+
+  test("a .java file under a test/ directory should be routed to the test scope") {
+    val onDiskPath = os.rel / "test" / s"$javaTestPublicClassName.java"
+    val testInputs = TestInputs(Seq(onDiskPath -> javaTestSourceContent), Seq("."))
+    expectJavaFileRoutedToTestScope(testInputs, onDiskPath)
+  }
+
+  test("a .java file with //> using target.scope test should be routed to the test scope") {
+    val onDiskPath = os.rel / s"$javaTestPublicClassName.java"
+    val testInputs = TestInputs(
+      onDiskPath ->
+        s"""//> using target.scope test
+           |
+           |$javaTestSourceContent""".stripMargin
+    )
+    expectJavaFileRoutedToTestScope(testInputs, onDiskPath)
   }
 
   test("should skip SheBang in .sc and .scala") {

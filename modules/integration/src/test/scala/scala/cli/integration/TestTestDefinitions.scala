@@ -4,7 +4,9 @@ import com.eed3si9n.expecty.Expecty.expect
 
 import scala.annotation.tailrec
 import scala.cli.integration.Constants.munitVersion
-import scala.cli.integration.TestUtil.StringOps
+import scala.cli.integration.TestUtil.{ProcOps, StringOps}
+import scala.concurrent.duration.DurationInt
+import scala.util.Properties
 
 abstract class TestTestDefinitions extends ScalaCliSuite with TestScalaVersionArgs {
   this: TestScalaVersion =>
@@ -232,6 +234,72 @@ abstract class TestTestDefinitions extends ScalaCliSuite with TestScalaVersionAr
     }
   }
 
+  test("test auto setup-ide enabled by default") {
+    successfulTestInputs().fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      val output   = os.proc(TestUtil.cli, "test", extraOptions, ".").call(cwd = root).out.text()
+      expect(output.contains("Hello from tests"))
+      assert(os.exists(bspEntry))
+    }
+  }
+
+  test("test can disable auto setup-ide via --auto-setup-ide=false") {
+    successfulTestInputs().fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      val output   =
+        os.proc(TestUtil.cli, "test", extraOptions, ".", "--auto-setup-ide=false").call(cwd = root)
+          .out
+          .text()
+      expect(output.contains("Hello from tests"))
+      assert(!os.exists(bspEntry))
+    }
+  }
+
+  if (!Properties.isMac || !TestUtil.isCI)
+    test("--watching with --watch re-runs tests on external file change") {
+      val sourceFile   = os.rel / "MyTests.test.scala"
+      val externalFile = os.rel / "data" / "input.txt"
+      TestInputs(
+        sourceFile ->
+          s"""//> using dep org.scalameta::munit::$munitVersion
+             |
+             |class MyTests extends munit.FunSuite {
+             |  test("watched input") {
+             |    val content = scala.io.Source.fromFile("data/input.txt").mkString.trim
+             |    println(content)
+             |    assert(content.nonEmpty)
+             |  }
+             |}
+             |""".stripMargin,
+        externalFile -> "Hello"
+      ).fromRoot { root =>
+        TestUtil.withProcessWatching(
+          proc = os.proc(
+            TestUtil.cli,
+            "--power",
+            "test",
+            ".",
+            "--watch",
+            "--watching",
+            "data",
+            extraOptions
+          )
+            .spawn(cwd = root, mergeErrIntoOut = true),
+          timeout = 120.seconds
+        ) { (proc, timeout, ec) =>
+          implicit val ec0  = ec
+          val initialOutput = proc.readOutputUntilWatchingMessage(timeout)
+          expect(initialOutput.exists(_.contains("Hello")))
+
+          Thread.sleep(2000L)
+          os.write.over(root / externalFile, "World")
+
+          val rerunOutput = proc.readOutputUntilWatchingMessage(timeout)
+          expect(rerunOutput.exists(_.contains("World")))
+        }
+      }
+    }
+
   if (actualScalaVersion.startsWith("2"))
     test("successful test JVM 8") {
       successfulTestInputs().fromRoot { root =>
@@ -448,6 +516,37 @@ abstract class TestTestDefinitions extends ScalaCliSuite with TestScalaVersionAr
 
   test("utest native") {
     TestUtil.retryOnCi()(utestNative())
+  }
+
+  for {
+    (platformArgs, platformName) <- Seq(
+      (Seq("--native"), "Scala Native"),
+      (Seq("--js"), "Scala.js")
+    )
+  } test(s"utest on $platformName with JVM-only dep syntax produces an informative error") {
+    TestUtil.retryOnCi() {
+      TestInputs(
+        os.rel / "MyTests.test.scala" ->
+          s"""//> using dep com.lihaoyi::utest:$utestVersion
+             |import utest._
+             |
+             |object MyTests extends TestSuite {
+             |  val tests = Tests {
+             |    test("foo") { assert(2 + 2 == 4) }
+             |  }
+             |}
+             |""".stripMargin
+      ).fromRoot { root =>
+        val res = os.proc(TestUtil.cli, "test", extraOptions, ".", platformArgs)
+          .call(cwd = root, check = false, mergeErrIntoOut = true)
+        expect(res.exitCode != 0)
+        val out = res.out.text()
+        expect(out.contains(s"No framework found by $platformName test bridge"))
+        expect(out.contains("JVM-only Scala dependencies"))
+        expect(out.contains("utest"))
+        expect(out.contains("::"))
+      }
+    }
   }
 
   test("junit") {
@@ -787,28 +886,41 @@ abstract class TestTestDefinitions extends ScalaCliSuite with TestScalaVersionAr
     }
   }
 
-  test("successful pure Java test with JUnit") {
-    val expectedMessage = "Hello from JUnit"
-    TestInputs(
-      os.rel / "test" / "MyTests.java" ->
-        s"""//> using test.dependencies junit:junit:4.13.2
-           |//> using test.dependencies com.novocode:junit-interface:0.11
-           |import org.junit.Test;
-           |import static org.junit.Assert.assertEquals;
-           |
-           |public class MyTests {
-           |  @Test
-           |  public void foo() {
-           |    assertEquals(4, 2 + 2);
-           |    System.out.println("$expectedMessage");
-           |  }
-           |}
-           |""".stripMargin
-    ).fromRoot { root =>
-      val res = os.proc(TestUtil.cli, "test", extraOptions, ".").call(cwd = root)
-      expect(res.out.text().contains(expectedMessage))
-    }
+  for {
+    (placementName, fileRelPath, extraDirectives, extraCliFlags) <- Seq(
+      (".test.java suffix", os.rel / "MyTests.test.java", "", Seq.empty[String]),
+      ("test/ subdirectory", os.rel / "test" / "MyTests.java", "", Seq.empty[String]),
+      (
+        "//> using target.scope test",
+        os.rel / "MyTests.java",
+        "//> using target.scope test\n",
+        Seq("--power")
+      )
+    )
+    expectedMessage = "Hello from JUnit"
   }
+    test(s"successful pure Java test with JUnit ($placementName)") {
+      TestInputs(
+        fileRelPath ->
+          s"""$extraDirectives//> using test.dep junit:junit:4.13.2
+             |//> using test.dep com.novocode:junit-interface:0.11
+             |import org.junit.Test;
+             |import static org.junit.Assert.assertEquals;
+             |
+             |public class MyTests {
+             |  @Test
+             |  public void foo() {
+             |    assertEquals(4, 2 + 2);
+             |    System.out.println("$expectedMessage");
+             |  }
+             |}
+             |""".stripMargin
+      ).fromRoot { root =>
+        val res =
+          os.proc(TestUtil.cli, extraCliFlags, "test", extraOptions, ".").call(cwd = root)
+        expect(res.out.text().contains(expectedMessage))
+      }
+    }
 
   test(s"zio-test warning when zio-test-sbt was not passed") {
     TestUtil.retryOnCi() {

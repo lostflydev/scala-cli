@@ -200,7 +200,7 @@ Force overwriting values for key
 
 Available in commands:
 
-[`compile`](./commands.md#compile), [`repl` , `console`](./commands.md#repl), [`run`](./commands.md#run), [`shebang`](./commands.md#shebang), [`test`](./commands.md#test)
+[`compile`](./commands.md#compile), [`doc`](./commands.md#doc), [`repl` , `console`](./commands.md#repl), [`run`](./commands.md#run), [`shebang`](./commands.md#shebang), [`test`](./commands.md#test)
 
 <!-- Automatically generated, DO NOT EDIT MANUALLY -->
 
@@ -390,7 +390,7 @@ Aliases: `--fmt-version`
 
 `IMPLEMENTATION specific` per Scala Runner specification
 
-Pass scalafmt version before running it (3.10.7 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
+Pass scalafmt version before running it (3.11.1 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
 
 ## Global suppress warning options
 
@@ -497,6 +497,14 @@ Aliases: `--fmt-help`, `--help-fmt`, `--scalafmt-help`
 `IMPLEMENTATION specific` per Scala Runner specification
 
 Show options for Scalafmt
+
+### `--help-wasm`
+
+Aliases: `--wasm-help`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Show options for WebAssembly
 
 ## Install completions options
 
@@ -728,6 +736,34 @@ Available in commands:
 
 *This section was automatically generated and may be empty if no options were available.*
 
+## Repl options
+
+Available in commands:
+
+[`repl` , `console`](./commands.md#repl)
+
+<!-- Automatically generated, DO NOT EDIT MANUALLY -->
+
+### `--jshell`
+
+Aliases: `--jsh`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Use JShell as the REPL (default for pure-Java projects). Requires JDK >= 9.
+
+### `--repl-init-script-file`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Read the REPL init script (--repl-init-script) from a file. Mutually exclusive with --repl-init-script.
+
+### `--repl-dry-run`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Don't actually run the REPL, just fetch it
+
 ## Run options
 
 Available in commands:
@@ -772,7 +808,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 `SHOULD have` per Scala Runner specification
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 ### `--js-mode`
 
@@ -872,7 +908,7 @@ Path to the Scala.js linker
 
 `IMPLEMENTATION specific` per Scala Runner specification
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 ### `--js-cli-java-arg`
 
@@ -904,7 +940,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 `SHOULD have` per Scala Runner specification
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 ### `--native-mode`
 
@@ -1066,7 +1102,7 @@ Aliases: `-S`, `--scala`
 
 `MUST have` per Scala Runner specification
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 ### `--scala-binary-version`
 
@@ -1156,13 +1192,37 @@ Aliases: `--toolkit`
 
 `IMPLEMENTATION specific` per Scala Runner specification
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 ### `--exclude`
 
 `IMPLEMENTATION specific` per Scala Runner specification
 
 Exclude sources
+
+### `--auto-setup-ide`
+
+Aliases: `--auto-setup-bsp`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+### [deprecated] `--deprecated-test-option`
+
+**Deprecated**: For testing purposes only.
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Deprecated test option (internal, do not use)
+
+### `--deprecated-test-alias-option`
+
+Aliases: [deprecated] `--deprecated-test-alias`
+
+`IMPLEMENTATION specific` per Scala Runner specification
+
+Option with deprecated alias (internal, do not use)
 
 ## Snippet options
 
@@ -1591,20 +1651,6 @@ Print the update to `env` variable
 `IMPLEMENTATION specific` per Scala Runner specification
 
 Binary directory
-
-### Repl options
-
-Available in commands:
-
-[`repl` , `console`](./commands.md#repl)
-
-<!-- Automatically generated, DO NOT EDIT MANUALLY -->
-
-### `--repl-dry-run`
-
-`IMPLEMENTATION specific` per Scala Runner specification
-
-Don't actually run the REPL, just fetch it
 
 ### Semantic db options
 

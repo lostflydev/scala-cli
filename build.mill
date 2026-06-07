@@ -4,7 +4,7 @@
 //| - io.github.alexarchambault.mill::mill-native-image-upload:0.2.4
 //| - com.goyeau::mill-scalafix::0.6.0
 //| - com.lumidion::sonatype-central-client-requests:0.6.0
-//| - io.get-coursier:coursier-launcher_2.13:2.1.25-M23
+//| - io.get-coursier:coursier-launcher_2.13:2.1.25-M25
 //| - org.eclipse.jgit:org.eclipse.jgit:7.5.0.202512021534-r
 package build
 
@@ -98,6 +98,8 @@ object `specification-level` extends Cross[SpecificationLevel](Scala.scala3MainV
     with CrossScalaDefaultToInternal
 object `build-macros` extends Cross[BuildMacros](Scala.scala3MainVersions)
     with CrossScalaDefaultToInternal
+object `directives-parser` extends Cross[DirectivesParserModule](Scala.scala3MainVersions)
+    with CrossScalaDefaultToInternal
 object config extends Cross[Config](Scala.scala3MainVersions)
     with CrossScalaDefaultToInternal
 object options extends Cross[Options](Scala.scala3MainVersions)
@@ -112,6 +114,8 @@ object runner extends Cross[Runner](Scala.runnerScalaVersions)
     with CrossScalaDefaultToRunner
 object `test-runner` extends Cross[TestRunner](Scala.runnerScalaVersions)
     with CrossScalaDefaultToRunner
+object `java-test-runner` extends JavaTestRunner
+    with LocatedInModules
 object `tasty-lib` extends Cross[TastyLib](Scala.scala3MainVersions)
     with CrossScalaDefaultToInternal
 
@@ -262,19 +266,7 @@ trait GenerateReferenceDoc extends CrossSbtModule
 }
 
 object dummy extends LocatedInModules {
-  // dummy projects to get scala steward updates for Ammonite and scalafmt, whose
-  // versions are used in the fmt and repl commands, and ensure Ammonite is available
-  // for all Scala versions we support.
-  object amm extends Cross[Amm](Scala.listMaxAmmoniteScalaVersion)
-  trait Amm  extends Cross.Module[String] with CrossScalaModule {
-    override def crossScalaVersion: String = crossValue
-    override def mvnDeps: T[Seq[Dep]]      = {
-      val ammoniteDep =
-        if (crossValue == Scala.scala3Lts) Deps.ammoniteForScala3Lts
-        else Deps.ammonite
-      Seq(ammoniteDep)
-    }
-  }
+  // dummy project to get scala-steward updates for scalafmt, whose version is used in the fmt command
   object scalafmt extends ScalaModule {
     override def scalaVersion: T[String] = Scala.defaultInternal
     override def mvnDeps: T[Seq[Dep]]    = Seq(
@@ -312,9 +304,7 @@ trait BuildMacros extends ScalaCliCrossSbtModule
   }
 
   object test extends ScalaCliTests with ScalaCliScalafixModule {
-    override def scalacOptions: T[Seq[String]] = Task {
-      super.scalacOptions() ++ Seq("-deprecation")
-    }
+    override def scalacOptions: T[Seq[String]] = super.scalacOptions()
 
     def testNegativeCompilation(): Command[Unit] = Task.Command(exclusive = true) {
       val base          = BuildCtx.workspaceRoot / "modules" / "build-macros" / "src"
@@ -452,10 +442,16 @@ trait Core extends ScalaCliCrossSbtModule
     val runnerMainClass = build.runner(crossScalaVersion)
       .mainClass()
       .getOrElse(sys.error("No main class defined for runner"))
+    val javaTestRunnerMainClass = `java-test-runner`
+      .mainClass()
+      .getOrElse(sys.error("No main class defined for java-test-runner"))
     val detailedVersionValue =
       if (`local-repo`.developingOnStubModules) s"""Some("${vcsState()}")"""
       else "None"
     val testRunnerOrganization = `test-runner`(crossScalaVersion)
+      .pomSettings()
+      .organization
+    val javaTestRunnerOrganization = `java-test-runner`
       .pomSettings()
       .organization
     val code =
@@ -478,6 +474,11 @@ trait Core extends ScalaCliCrossSbtModule
          |  def testRunnerModuleName = "${`test-runner`(crossScalaVersion).artifactName()}"
          |  def testRunnerVersion = "${`test-runner`(crossScalaVersion).publishVersion()}"
          |  def testRunnerMainClass = "$testRunnerMainClass"
+         |
+         |  def javaTestRunnerOrganization = "$javaTestRunnerOrganization"
+         |  def javaTestRunnerModuleName = "${`java-test-runner`.artifactName()}"
+         |  def javaTestRunnerVersion = "${`java-test-runner`.publishVersion()}"
+         |  def javaTestRunnerMainClass = "$javaTestRunnerMainClass"
          |
          |  def runnerOrganization = "${build.runner(crossScalaVersion).pomSettings().organization}"
          |  def runnerModuleName = "${build.runner(crossScalaVersion).artifactName()}"
@@ -503,8 +504,6 @@ trait Core extends ScalaCliCrossSbtModule
          |  def jmhCoreModule = "${Deps.jmhCore.dep.module.name.value}"
          |  def jmhGeneratorBytecodeModule = "${Deps.jmhGeneratorBytecode.dep.module.name.value}"
          |
-         |  def ammoniteVersion = "${Deps.Versions.ammonite}"
-         |  def ammoniteVersionForScala3Lts = "${Deps.Versions.ammoniteForScala3Lts}"
          |  def millVersion = "${BuildInfo.millVersion}"
          |  def maxScalaNativeForMillExport = "${Deps.Versions.maxScalaNativeForMillExport}"
          |
@@ -528,6 +527,7 @@ trait Core extends ScalaCliCrossSbtModule
          |  def minimumBloopJavaVersion = ${Java.minimumBloopJava}
          |  def minimumInternalJavaVersion = ${Java.minimumInternalJava}
          |  def defaultJavaVersion = ${Java.defaultJava}
+         |  def mainJavaVersions = Seq(${Java.mainJavaVersions.sorted.mkString(", ")})
          |
          |  def defaultScalaVersion = "${Scala.defaultUser}"
          |  def defaultScala212Version = "${Scala.scala212}"
@@ -604,7 +604,8 @@ trait Directives extends ScalaCliCrossSbtModule
     options(crossScalaVersion),
     core(crossScalaVersion),
     `build-macros`(crossScalaVersion),
-    `specification-level`(crossScalaVersion)
+    `specification-level`(crossScalaVersion),
+    `directives-parser`(crossScalaVersion)
   )
   override def scalacOptions: T[Seq[String]] = Task {
     super.scalacOptions() ++ asyncScalacOptions(crossScalaVersion)
@@ -618,8 +619,7 @@ trait Directives extends ScalaCliCrossSbtModule
     // Deps.asm,
     Deps.bloopConfig,
     Deps.jsoniterCore,
-    Deps.pprint,
-    Deps.usingDirectives
+    Deps.pprint
   )
 
   override def repositoriesTask: Task[Seq[Repository]] =
@@ -668,7 +668,7 @@ trait Config extends ScalaCliCrossSbtModule
     Seq(`specification-level`(crossScalaVersion))
   override def mvnDeps: T[Seq[Dep]]          = super.mvnDeps() ++ Seq(Deps.jsoniterCore)
   override def compileMvnDeps: T[Seq[Dep]]   = super.compileMvnDeps() ++ Seq(Deps.jsoniterMacros)
-  override def scalacOptions: T[Seq[String]] = super.scalacOptions() ++ Seq("-deprecation")
+  override def scalacOptions: T[Seq[String]] = super.scalacOptions()
 }
 
 trait Options extends ScalaCliCrossSbtModule
@@ -699,7 +699,7 @@ trait Options extends ScalaCliCrossSbtModule
     Task.Anon(super.repositoriesTask() ++ deps.customRepositories)
 
   object test extends ScalaCliTests with ScalaCliScalafixModule {
-    override def scalacOptions = super.scalacOptions() ++ Seq("-deprecation")
+    override def scalacOptions = super.scalacOptions()
     // uncomment below to debug tests in attach mode on 5005 port
     // def forkArgs = Task {
     //   super.forkArgs() ++ Seq("-agentlib:jdwp=transport=dt_socket,server=n,address=localhost:5005,suspend=y")
@@ -748,7 +748,7 @@ trait Build extends ScalaCliCrossSbtModule
     Task.Anon(super.repositoriesTask() ++ deps.customRepositories)
 
   object test extends ScalaCliTests with ScalaCliScalafixModule {
-    override def scalacOptions: T[Seq[String]] = super.scalacOptions() ++ Seq("-deprecation")
+    override def scalacOptions: T[Seq[String]] = super.scalacOptions()
     override def mvnDeps: T[Seq[Dep]]          = super.mvnDeps() ++ Seq(
       Deps.pprint,
       Deps.slf4jNop
@@ -794,6 +794,16 @@ trait Build extends ScalaCliCrossSbtModule
   }
 }
 
+trait DirectivesParserModule extends ScalaCliCrossSbtModule
+    with ScalaCliPublishModule
+    with HasTests
+    with ScalaCliScalafixModule
+    with LocatedInModules {
+  override def crossScalaVersion: String = crossValue
+
+  object test extends ScalaCliTests with ScalaCliScalafixModule
+}
+
 trait SpecificationLevel extends ScalaCliCrossSbtModule
     with ScalaCliPublishModule
     with LocatedInModules {
@@ -834,8 +844,6 @@ trait Cli extends CrossSbtModule with ProtoBuildModule with CliLaunchers
          |  def pythonInterfaceVersion      = "${Deps.pythonInterface.dep.versionConstraint.asString}"
          |  def launcherTypeResourcePath    = "${launcherTypeResourcePath.toString}"
          |  def defaultFilesResourcePath    = "$defaultFilesResourcePath"
-         |  def maxAmmoniteScala3Version    = "${Scala.maxAmmoniteScala3Version}"
-         |  def maxAmmoniteScala3LtsVersion = "${Scala.maxAmmoniteScala3LtsVersion}"
          |}
          |""".stripMargin
     if (!os.isFile(dest) || os.read(dest) != code)
@@ -857,8 +865,6 @@ trait Cli extends CrossSbtModule with ProtoBuildModule with CliLaunchers
          |  def scalaJsVersion = "${Scala.scalaJs}"
          |  def scalaJsCliVersion = "${Scala.scalaJsCli}"
          |  def scalaNativeVersion = "${Deps.nativeTools.dep.versionConstraint.asString}"
-         |  def ammoniteVersion = "${Deps.Versions.ammonite}"
-         |  def ammoniteVersionForScala3Lts = "${Deps.Versions.ammoniteForScala3Lts}"
          |  def defaultScalafmtVersion = "${Deps.scalafmtCli.dep.versionConstraint.asString}"
          |  def defaultGraalVMJavaVersion = "${deps.graalVmJavaVersion}"
          |  def defaultGraalVMVersion = "${deps.graalVmCommunityVersion}"
@@ -1012,6 +1018,9 @@ trait CliIntegration extends SbtModule
   )
 
   trait IntegrationScalaTests extends super.ScalaCliTests with ScalaCliScalafixModule {
+    override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(
+      `directives-parser`(sv)
+    )
     override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
       Deps.bsp4j,
       Deps.coursier
@@ -1020,8 +1029,7 @@ trait CliIntegration extends SbtModule
       Deps.jsoniterCore,
       Deps.libsodiumjni,
       Deps.pprint,
-      Deps.slf4jNop,
-      Deps.usingDirectives
+      Deps.slf4jNop
     )
     override def compileMvnDeps: T[Seq[Dep]] = super.compileMvnDeps() ++ Seq(
       Deps.jsoniterMacros
@@ -1069,10 +1077,6 @@ trait CliIntegration extends SbtModule
             .mkString(", ")})
            |  def scala38MinJavaVersion        = ${Java.minimumScala38Java}
            |  def defaultScalafmtVersion       = "${Deps.scalafmtCli.dep.versionConstraint.asString}"
-           |  def maxAmmoniteScala212Version   = "${Scala.maxAmmoniteScala212Version}"
-           |  def maxAmmoniteScala213Version   = "${Scala.maxAmmoniteScala213Version}"
-           |  def maxAmmoniteScala3Version     = "${Scala.maxAmmoniteScala3Version}"
-           |  def maxAmmoniteScala3LtsVersion  = "${Scala.maxAmmoniteScala3LtsVersion}"
            |  def legacyScala3Versions         = Seq(${Scala.legacyScala3Versions.map(p =>
             s"\"$p\""
           ).mkString(", ")})
@@ -1082,7 +1086,6 @@ trait CliIntegration extends SbtModule
            |  def scalaNativeVersion04         = "${Deps.Versions.scalaNative04}"
            |  def scalaNativeVersion05         = "${Deps.Versions.scalaNative05}"
            |  def semanticDbJavacPluginVersion = "${Deps.semanticDbJavac.dep.versionConstraint.asString}"
-           |  def ammoniteVersion              = "${Deps.ammonite.dep.versionConstraint.asString}"
            |  def defaultGraalVMJavaVersion    = "${deps.graalVmJavaVersion}"
            |  def defaultGraalVMVersion        = "${deps.graalVmCommunityVersion}"
            |  def runnerScala30LegacyVersion   = "${Cli.runnerScala30LegacyVersion}"
@@ -1322,6 +1325,16 @@ trait TestRunner extends CrossSbtModule
   override def mainClass: T[Option[String]] = Some("scala.build.testrunner.DynamicTestRunner")
 }
 
+trait JavaTestRunner extends JavaModule
+    with ScalaCliPublishModule
+    with LocatedInModules {
+  override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
+    Deps.asm,
+    Deps.testInterface
+  )
+  override def mainClass: T[Option[String]] = Some("scala.build.testrunner.JavaDynamicTestRunner")
+}
+
 trait TastyLib extends ScalaCliCrossSbtModule
     with ScalaCliPublishModule
     with ScalaCliScalafixModule
@@ -1356,7 +1369,7 @@ object `local-repo` extends LocalRepo {
   def developingOnStubModules = false
 
   override def stubsModules: Seq[PublishLocalNoFluff] =
-    Seq(runner(Scala.runnerScala3), `test-runner`(Scala.runnerScala3))
+    Seq(runner(Scala.runnerScala3), `test-runner`(Scala.runnerScala3), `java-test-runner`)
 
   override def version: T[String] = runner(Scala.runnerScala3).publishVersion()
 }
@@ -1848,6 +1861,54 @@ object ci extends Module {
     )
       .call(cwd = debianDir, stdin = pgpPassphrase, stdout = inReleasePath)
 
+    // Export the public key as a binary (non-armored) keyring at the repo root so that
+    // users can reference it via `signed-by` in their APT sources.
+    // Binary format is required per https://wiki.debian.org/DebianRepository/UseThirdParty
+    // We export all public keys (without specifying a user ID) because `gpg-setup.sh`
+    // imports exactly one key, and `gpg --export <user-id>` silently produces empty
+    // output with exit code 0 when the user ID doesn't match.
+    val keyringPath = packagesDir / "scala-cli-archive-keyring.gpg"
+    os.proc("gpg", "--batch", "--yes", "--export")
+      .call(stdout = keyringPath)
+    if (!os.exists(keyringPath) || os.size(keyringPath) == 0)
+      sys.error(
+        s"""gpg --export produced an empty keyring at $keyringPath; 
+           |check that PGP_SECRET was imported correctly by gpg-setup.sh""".stripMargin
+      )
+
+    // Also re-export the armored KEY.gpg used by Fedora/yum and referenced by the
+    // packages repo landing page. Regenerating it on every release keeps it in sync
+    // with the binary keyring above, so key rotations (e.g. to replace a SHA1
+    // self-signed key) automatically propagate to all consumers.
+    val armoredKeyPath = packagesDir / "KEY.gpg"
+    os.proc("gpg", "--batch", "--yes", "--armor", "--export")
+      .call(stdout = armoredKeyPath)
+    if (!os.exists(armoredKeyPath) || os.size(armoredKeyPath) == 0)
+      sys.error(
+        s"""gpg --armor --export produced an empty key at $armoredKeyPath; 
+           |check that PGP_SECRET was imported correctly by gpg-setup.sh""".stripMargin
+      )
+
+    // Update the .list file to include the signed-by option pointing at the keyring.
+    // This scopes the key to this repository only, preventing the globally-trusted key
+    // security issue described in the Debian wiki.
+    os.write.over(
+      debianDir / "scala_cli_packages.list",
+      "deb [signed-by=/etc/apt/keyrings/scala-cli-archive-keyring.gpg] https://virtuslab.github.io/scala-cli-packages/debian ./\n"
+    )
+
+    // Also provide a DEB822 .sources file for users on modern Debian (apt modernize-sources).
+    // No Components field: this is a flat repository (Suites: ./).
+    // No Architectures field: avoids breaking when aarch64 packages are added later.
+    os.write.over(
+      debianDir / "scala_cli_packages.sources",
+      """Types: deb
+        |URIs: https://virtuslab.github.io/scala-cli-packages/debian
+        |Suites: ./
+        |Signed-By: /etc/apt/keyrings/scala-cli-archive-keyring.gpg
+        |""".stripMargin
+    )
+
     commitChanges(s"Update Debian packages for $version", branch, packagesDir)
   }
   def updateChocolateyPackage(): Command[os.CommandResult] = Task.Command {
@@ -1932,8 +1993,6 @@ object ci extends Module {
       "PGP_PASSPHRASE",
       "--env",
       "GPG_EMAIL",
-      "--env",
-      "KEYGRIP",
       "--privileged",
       "fedora:40",
       "sh",

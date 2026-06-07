@@ -210,35 +210,77 @@ final case class SharedOptions(
   @HelpMessage("Force object wrapper for scripts")
   @Tag(tags.experimental)
     objectWrapper: Option[Boolean] = None,
+  @Group(HelpGroup.Scala.toString)
+  @HelpMessage(
+    "Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default."
+  )
+  @Name("auto-setup-bsp")
+  @Tag(tags.implementation)
+    autoSetupIde: Option[Boolean] = None,
   @Recurse
-    scope: ScopeOptions = ScopeOptions()
+    scope: ScopeOptions = ScopeOptions(),
+
+  @Hidden
+  @Tag(tags.implementation)
+  @Tag(tags.deprecatedOption("For testing purposes only."))
+  @HelpMessage("Deprecated test option (internal, do not use)")
+    deprecatedTestOption: Option[Boolean] = None,
+
+  @Hidden
+  @Tag(tags.implementation)
+  @Name("deprecatedTestAlias")
+  @Tag(tags.deprecated("deprecatedTestAlias"))
+  @HelpMessage("Option with deprecated alias (internal, do not use)")
+    deprecatedTestAliasOption: Option[Boolean] = None
 ) extends HasGlobalOptions {
   // format: on
 
   def logger: Logger                 = logging.logger
   override def global: GlobalOptions =
     GlobalOptions(logging = logging, globalSuppress = suppress.global, powerOptions = powerOptions)
+  def autoSetupIdeEnabled: Boolean =
+    autoSetupIde
+      .orElse(
+        ConfigDbUtils.getLatestConfigDbOpt(logger)
+          .flatMap(_.get(Keys.autoSetupIde).toOption)
+          .flatten
+      )
+      .getOrElse(true)
 
-  private def scalaJsOptions(opts: ScalaJsOptions): options.ScalaJsOptions = {
+  private def scalaJsOptions(
+    opts: ScalaJsOptions
+  ): Either[BuildException, options.ScalaJsOptions] = {
     import opts._
-    options.ScalaJsOptions(
-      version = jsVersion,
-      mode = options.ScalaJsMode(jsMode),
-      moduleKindStr = jsModuleKind,
-      checkIr = jsCheckIr,
-      emitSourceMaps = jsEmitSourceMaps,
-      sourceMapsDest = jsSourceMapsPath.filter(_.trim.nonEmpty).map(os.Path(_, Os.pwd)),
-      dom = jsDom,
-      header = jsHeader,
-      allowBigIntsForLongs = jsAllowBigIntsForLongs,
-      avoidClasses = jsAvoidClasses,
-      avoidLetsAndConsts = jsAvoidLetsAndConsts,
-      moduleSplitStyleStr = jsModuleSplitStyle,
-      smallModuleForPackage = jsSmallModuleForPackage,
-      esVersionStr = jsEsVersion,
-      noOpt = jsNoOpt,
-      remapEsModuleImportMap = jsEsModuleImportMap.filter(_.trim.nonEmpty).map(os.Path(_, Os.pwd)),
-      jsEmitWasm = jsEmitWasm.getOrElse(false)
+    val parsedJSRuntime = jsRuntime.fold(
+      Right(options.JSRuntime.default): Either[BuildException, options.JSRuntime]
+    ) { rt =>
+      options.JSRuntime.parse(rt).toRight {
+        val validValues = options.JSRuntime.all.map(_.name).mkString(", ")
+        new scala.build.errors.UnrecognizedJSRuntimeError(rt, validValues)
+      }
+    }
+    parsedJSRuntime.map(parsedRuntime =>
+      options.ScalaJsOptions(
+        version = jsVersion,
+        mode = options.ScalaJsMode(jsMode),
+        moduleKindStr = jsModuleKind,
+        checkIr = jsCheckIr,
+        emitSourceMaps = jsEmitSourceMaps,
+        sourceMapsDest = jsSourceMapsPath.filter(_.trim.nonEmpty).map(os.Path(_, Os.pwd)),
+        dom = jsDom,
+        header = jsHeader,
+        allowBigIntsForLongs = jsAllowBigIntsForLongs,
+        avoidClasses = jsAvoidClasses,
+        avoidLetsAndConsts = jsAvoidLetsAndConsts,
+        moduleSplitStyleStr = jsModuleSplitStyle,
+        smallModuleForPackage = jsSmallModuleForPackage,
+        esVersionStr = jsEsVersion,
+        noOpt = jsNoOpt,
+        remapEsModuleImportMap =
+          jsEsModuleImportMap.filter(_.trim.nonEmpty).map(os.Path(_, Os.pwd)),
+        jsEmitWasm = jsEmitWasm.getOrElse(false),
+        jsRuntime = parsedRuntime
+      )
     )
   }
 
@@ -290,7 +332,10 @@ final case class SharedOptions(
 
   def scalacOptions: List[String] = scalac.scalacOption ++ scalacOptionsFromFiles
 
-  def buildOptions(ignoreErrors: Boolean = false)
+  def buildOptions(
+    ignoreErrors: Boolean = false,
+    watchOptions: SharedWatchOptions = SharedWatchOptions()
+  )
     : Either[BuildException, scala.build.options.BuildOptions] =
     either {
       val releaseOpt = scalacOptions.getScalacOption("-release")
@@ -304,21 +349,28 @@ final case class SharedOptions(
         case _ =>
       }
       val parsedPlatform = platform.map(Platform.normalize).flatMap(Platform.parse)
-      val platformOpt    = value {
-        (parsedPlatform, js.js, native.native) match {
-          case (Some(p: Platform.JS.type), _, false)      => Right(Some(p))
-          case (Some(p: Platform.Native.type), false, _)  => Right(Some(p))
-          case (Some(p: Platform.JVM.type), false, false) => Right(Some(p))
-          case (Some(p), _, _)                            =>
-            val jsSeq        = if (js.js) Seq(Platform.JS) else Seq.empty
+      // Wasm mode requires Scala.js platform for compilation. Selecting a JS runtime
+      // (--js-runtime) does not by itself enable Wasm.
+      val wasmEnabled = js.jsEmitWasm.getOrElse(false)
+      val platformOpt = value {
+        (parsedPlatform, js.js, native.native, wasmEnabled) match {
+          case (Some(p: Platform.JS.type), _, false, _)          => Right(Some(p))
+          case (Some(p: Platform.Native.type), false, _, false)  => Right(Some(p))
+          case (Some(p: Platform.JVM.type), false, false, false) => Right(Some(p))
+          case (Some(p), _, _, _)                                =>
+            val jsSeq        = if (js.js || wasmEnabled) Seq(Platform.JS) else Seq.empty
             val nativeSeq    = if (native.native) Seq(Platform.Native) else Seq.empty
             val platformsSeq = Seq(p) ++ jsSeq ++ nativeSeq
             Left(new AmbiguousPlatformError(platformsSeq.distinct.map(_.toString)))
-          case (_, true, true) =>
+          case (_, true, true, _) =>
             Left(new AmbiguousPlatformError(Seq(Platform.JS.toString, Platform.Native.toString)))
-          case (_, true, _) => Right(Some(Platform.JS))
-          case (_, _, true) => Right(Some(Platform.Native))
-          case _            => Right(None)
+          case (_, _, true, true) =>
+            Left(new AmbiguousPlatformError(Seq(Platform.Native.toString, "Wasm (requires JS)")))
+          case (_, true, _, _) => Right(Some(Platform.JS))
+          case (_, _, _, true) =>
+            Right(Some(Platform.JS)) // Wasm requires JS compilation (Scala.js Wasm backend)
+          case (_, _, true, _) => Right(Some(Platform.Native))
+          case _               => Right(None)
         }
       }
       val (assumedSourceJars, extraRegularJarsAndClasspath) =
@@ -403,7 +455,7 @@ final case class SharedOptions(
         scriptOptions = scala.build.options.ScriptOptions(
           forceObjectWrapper = objectWrapper
         ),
-        scalaJsOptions = scalaJsOptions(js),
+        scalaJsOptions = value(scalaJsOptions(js)),
         scalaNativeOptions = snOpts,
         javaOptions = value(scala.cli.commands.util.JvmUtils.javaOptions(jvm)),
         jmhOptions = scala.build.options.JmhOptions(
@@ -441,7 +493,7 @@ final case class SharedOptions(
           scalaPyVersion = sharedPython.scalaPyVersion
         ),
         useBuildServer = compilationServer.server
-      )
+      ).orElse(watchOptions.buildOptions())
     }
 
   private def resolvedDependencies(

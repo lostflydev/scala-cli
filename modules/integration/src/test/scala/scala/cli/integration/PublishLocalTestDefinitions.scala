@@ -349,6 +349,188 @@ abstract class PublishLocalTestDefinitions extends ScalaCliSuite with TestScalaV
     }
   }
 
+  test("publish local --m2") {
+    val expectedFiles = {
+      val modName = s"${PublishTestInputs.testName}_$testedPublishedScalaVersion"
+      val base    =
+        os.rel / PublishTestInputs.testOrg.split('.').toSeq / modName / testPublishVersion
+      val baseFiles = Seq(
+        base / s"$modName-$testPublishVersion.jar",
+        base / s"$modName-$testPublishVersion.pom",
+        base / s"$modName-$testPublishVersion-sources.jar",
+        base / s"$modName-$testPublishVersion-javadoc.jar"
+      )
+      baseFiles
+        .flatMap { f =>
+          val md5  = f / os.up / s"${f.last}.md5"
+          val sha1 = f / os.up / s"${f.last}.sha1"
+          Seq(f, md5, sha1)
+        }
+        .toSet
+    }
+
+    PublishTestInputs.inputs()
+      .fromRoot { root =>
+        os.proc(
+          TestUtil.cli,
+          "--power",
+          "publish",
+          "local",
+          ".",
+          "--m2",
+          "--m2-home",
+          (root / "m2repo").toString,
+          extraOptions
+        )
+          .call(cwd = root)
+        val m2Local    = root / "m2repo"
+        val foundFiles = os.walk(m2Local)
+          .filter(os.isFile(_))
+          .map(_.relativeTo(m2Local))
+          .toSet
+        val missingFiles    = expectedFiles -- foundFiles
+        val unexpectedFiles = foundFiles -- expectedFiles
+        if (missingFiles.nonEmpty)
+          pprint.err.log(missingFiles)
+        if (unexpectedFiles.nonEmpty)
+          pprint.err.log(unexpectedFiles)
+        expect(missingFiles.isEmpty)
+        expect(unexpectedFiles.isEmpty)
+      }
+  }
+
+  test("publish local --m2 twice") {
+    PublishTestInputs.inputs().fromRoot { root =>
+      val m2Repo  = root / "m2repo"
+      val modName = s"${PublishTestInputs.testName}_$testedPublishedScalaVersion"
+      val jarPath = m2Repo /
+        PublishTestInputs.testOrg.split('.').toSeq /
+        modName / testPublishVersion / s"$modName-$testPublishVersion.jar"
+
+      def publishLocal(): os.CommandResult =
+        os.proc(
+          TestUtil.cli,
+          "--power",
+          "publish",
+          "local",
+          ".",
+          "--m2",
+          "--m2-home",
+          m2Repo.toString,
+          "--working-dir",
+          os.rel / "work-dir",
+          extraOptions
+        )
+          .call(cwd = root)
+
+      lazy val depsCp: String =
+        os.proc(
+          TestUtil.cs,
+          "fetch",
+          "--classpath",
+          s"com.lihaoyi:os-lib_$testedPublishedScalaVersion:0.11.3"
+        )
+          .call(cwd = root)
+          .out.trim()
+
+      def output(): String =
+        os.proc(
+          "java",
+          "-cp",
+          s"$jarPath${java.io.File.pathSeparator}$depsCp",
+          "Project"
+        )
+          .call(cwd = root)
+          .out.trim()
+
+      val expectedMessage1 = "Hello"
+      val expectedMessage2 = "olleH"
+      publishLocal()
+      val output1 = output()
+      expect(output1 == expectedMessage1)
+
+      os.write.over(
+        root / PublishTestInputs.projectFilePath,
+        PublishTestInputs.projFile(expectedMessage2)
+      )
+      publishLocal()
+      val output2 = output()
+      expect(output2 == expectedMessage2)
+    }
+  }
+
+  test("publish local ivy.xml includes license scm and developers") {
+    val licenseId  = "MIT"
+    val licenseUrl = "https://spdx.org/licenses/MIT.html"
+    val vcsOrg     = "it-integ"
+    val vcsProj    = "ivy-desc-test"
+    val devId      = "itest"
+    val devName    = "Integration Tester"
+    val devUrl     = "https://itest.example"
+
+    val modName        = s"${PublishTestInputs.testName}_$testedPublishedScalaVersion"
+    val pomProjectName = "Ivy metadata integration display name"
+
+    val scmUrl             = s"https://github.com/$vcsOrg/$vcsProj.git"
+    val scmConnection      = s"scm:git:github.com/$vcsOrg/$vcsProj.git"
+    val scmDevConnection   = s"scm:git:git@github.com:$vcsOrg/$vcsProj.git"
+    val developerDirective = s"$devId|$devName|$devUrl"
+
+    val publishConf =
+      s"""//> using publish.organization ${PublishTestInputs.testOrg}
+         |//> using publish.moduleName $modName
+         |//> using publish.name "$pomProjectName"
+         |//> using publish.version $testPublishVersion
+         |//> using publish.license $licenseId:$licenseUrl
+         |//> using publish.scm github:$vcsOrg/$vcsProj
+         |//> using publish.developer "$developerDirective"
+         |""".stripMargin
+
+    TestInputs(
+      PublishTestInputs.projectFilePath -> PublishTestInputs.projFile("Hello"),
+      PublishTestInputs.projectConfPath -> publishConf
+    ).fromRoot { root =>
+      os.proc(
+        TestUtil.cli,
+        "--power",
+        "publish",
+        "local",
+        ".",
+        "--ivy2-home",
+        os.rel / "ivy2",
+        extraOptions
+      )
+        .call(cwd = root)
+
+      val ivyPath = root / "ivy2" / "local" / PublishTestInputs.testOrg / modName /
+        testPublishVersion / "ivys" / "ivy.xml"
+      val pomPath = root / "ivy2" / "local" / PublishTestInputs.testOrg / modName /
+        testPublishVersion / "poms" / s"$modName.pom"
+      expect(os.exists(ivyPath))
+      expect(os.exists(pomPath))
+      val ivyXml = os.read(ivyPath)
+      val pomXml = os.read(pomPath)
+
+      expect(ivyXml.contains(s"""<license name="$licenseId""""))
+      expect(ivyXml.contains(s"""url="$licenseUrl""""))
+
+      expect(ivyXml.contains("""xmlns:m="http://maven.apache.org/POM/4.0.0""""))
+      expect(ivyXml.contains(s"<m:name>$pomProjectName</m:name>"))
+      expect(ivyXml.contains("<m:scm>"))
+      expect(ivyXml.contains("<m:developers>"))
+
+      expect(ivyXml.contains(s"<m:url>$scmUrl</m:url>"))
+      expect(ivyXml.contains(s"<m:connection>$scmConnection</m:connection>"))
+      expect(ivyXml.contains(s"<m:developerConnection>$scmDevConnection</m:developerConnection>"))
+
+      expect(ivyXml.contains(s"<m:id>$devId</m:id>"))
+      expect(ivyXml.contains(s"<m:name>$devName</m:name>"))
+      expect(ivyXml.contains(s"<m:url>$devUrl</m:url>"))
+
+      expect(pomXml.contains(s"<name>$pomProjectName</name>"))
+    }
+  }
+
   if actualScalaVersion.startsWith("3") then
     test("publish local with compileOnly.dep") {
       TestInputs(

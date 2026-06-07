@@ -24,7 +24,8 @@ final case class Inputs(
   mayAppendHash: Boolean,
   workspaceOrigin: Option[WorkspaceOrigin],
   enableMarkdown: Boolean,
-  allowRestrictedFeatures: Boolean
+  allowRestrictedFeatures: Boolean,
+  originalWorkspaceOpt: Option[os.Path]
 ) {
 
   def isEmpty: Boolean = elements.isEmpty
@@ -75,7 +76,8 @@ final case class Inputs(
     copy(
       workspace = elements.homeWorkspace(directories),
       mayAppendHash = false,
-      workspaceOrigin = Some(WorkspaceOrigin.HomeDir)
+      workspaceOrigin = Some(WorkspaceOrigin.HomeDir),
+      originalWorkspaceOpt = originalWorkspaceOpt.orElse(Some(workspace))
     )
   def avoid(forbidden: Seq[os.Path], directories: Directories): Inputs =
     if forbidden.exists(workspace.startsWith) then inHomeDir(directories) else this
@@ -104,6 +106,7 @@ final case class Inputs(
             Seq("dir:") ++ dirInput.singleFilesFromDirectory(enableMarkdown)
               .map(file => s"${file.path}:" + os.read(file.path))
           case _: ResourceDirectory => Nil
+          case _: SbtFile           => Nil
           case _                    => Seq(os.read(elem.path))
         }
         (Iterator(elem.path.toString) ++ content.iterator ++ Iterator("\n")).map(bytes)
@@ -158,7 +161,8 @@ object Inputs {
       mayAppendHash = needsHash,
       workspaceOrigin = Some(workspaceOrigin),
       enableMarkdown = enableMarkdown,
-      allowRestrictedFeatures = allowRestrictedFeatures
+      allowRestrictedFeatures = allowRestrictedFeatures,
+      originalWorkspaceOpt = None
     )
   }
 
@@ -282,6 +286,7 @@ object Inputs {
         else if arg.endsWith(".java") then Right(Seq(JavaFile(dir, subPath)))
         else if arg.endsWith(".jar") then Right(Seq(JarFile(dir, subPath)))
         else if arg.endsWith(".c") || arg.endsWith(".h") then Right(Seq(CFile(dir, subPath)))
+        else if arg.endsWith(".sbt") then Right(Seq(SbtFile(dir, subPath)))
         else if arg.endsWith(".md") then Right(Seq(MarkdownFile(dir, subPath)))
         else if acceptFds && arg.startsWith("/dev/fd/") then
           Right(Seq(VirtualScript(content, arg, os.sub / s"input-${idx + 1}.sc")))
@@ -474,11 +479,12 @@ object Inputs {
       mayAppendHash = true,
       workspaceOrigin = None,
       enableMarkdown = enableMarkdown,
-      allowRestrictedFeatures = false
+      allowRestrictedFeatures = false,
+      originalWorkspaceOpt = None
     )
 
   def empty(projectName: String): Inputs =
-    Inputs(Nil, None, os.pwd, projectName, false, None, true, false)
+    Inputs(Nil, None, os.pwd, projectName, false, None, true, false, None)
 
   def baseName(p: os.Path) = if (p == os.root || p.lastOpt.isEmpty) "" else p.baseName
 

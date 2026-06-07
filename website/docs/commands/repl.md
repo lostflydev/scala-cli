@@ -22,30 +22,21 @@ scala> :exit
 
 </ChainedSnippets>
 
-Scala CLI by default uses the normal Scala REPL.
+Scala CLI uses the Scala REPL by default, except for pure-Java projects where it defaults to JShell.
 
-If you prefer to use the [Ammonite REPL](https://ammonite.io/#Ammonite-REPL), specify `--amm` to launch it rather than the default REPL:
+## JShell backend (experimental)
 
-:::caution
-Using the Ammonite REPL is restricted and requires setting the `--power` option to be used.
-You can pass it explicitly or set it globally by running:
-
-    scala-cli config power true
-:::
+You can force JShell as the REPL backend with `--jshell` (`--jsh`), including in mixed Scala/Java or pure Scala projects.
 
 <ChainedSnippets>
 
 ```bash ignore
-scala-cli --power repl --amm
+scala-cli repl --jshell
 ```
 
 ```text
-Loading...
-Welcome to the Ammonite Repl 2.4.0-23-76673f7f (Scala 3.0.2 Java 11.0.11)
-@ println("Hello ammonite")
-Hello ammonite
-@ exit
-Bye!
+|  Welcome to JShell ...
+jshell>
 ```
 
 </ChainedSnippets>
@@ -79,6 +70,26 @@ scala> :quit
 ```
 
 </ChainedSnippets>
+
+## Watch mode
+
+Use `--watch` to recompile your inputs and restart the REPL session when sources change:
+
+```bash ignore
+scala-cli repl --watch Main.scala
+```
+
+`--watching` lets you include additional files or directories:
+
+```bash ignore
+scala-cli repl --watch --watching ./data Main.scala
+```
+
+You can also configure extra watched paths in sources:
+
+```scala
+//> using watching ./data
+```
 
 ## Passing REPL options
 It is also possible to manually pass REPL-specific options.

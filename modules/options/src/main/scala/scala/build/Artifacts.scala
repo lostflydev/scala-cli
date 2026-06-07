@@ -49,6 +49,7 @@ final case class Artifacts(
   extraSourceJars: Seq[os.Path],
   scalaOpt: Option[ScalaArtifacts],
   hasJvmRunner: Boolean,
+  hasJavaTestRunner: Boolean,
   resolution: Option[Resolution]
 ) {
 
@@ -131,6 +132,7 @@ object Artifacts {
     jvmVersion: Int,
     addJvmRunner: Option[Boolean],
     addJvmTestRunner: Boolean,
+    addJvmJavaTestRunner: Boolean,
     addJmhDependencies: Option[String],
     extraRepositories: Seq[Repository],
     keepResolution: Boolean,
@@ -140,6 +142,17 @@ object Artifacts {
     maybeRecoverOnError: BuildException => Option[BuildException]
   ): Either[BuildException, Artifacts] = either {
     val dependencies = defaultDependencies ++ extraDependencies
+
+    val scalaParamsForDepResolution =
+      scalaArtifactsParamsOpt.map(_.params).orElse(Some {
+        // default Scala params for dependency resolution
+        // used in projects with no Scala configuration (i.e. pure Java projects)
+        ScalaParameters(
+          Constants.defaultScalaVersion,
+          ScalaVersion.binary(Constants.defaultScalaVersion),
+          None
+        )
+      })
 
     val scalaVersion = (for {
       scalaArtifactsParams <- scalaArtifactsParamsOpt
@@ -189,11 +202,19 @@ object Artifacts {
       }
       else Nil
 
+    val jvmJavaTestRunnerDependencies =
+      if addJvmJavaTestRunner then
+        Seq(
+          dep"${Constants.javaTestRunnerOrganization}:${Constants.javaTestRunnerModuleName}:${Constants.javaTestRunnerVersion}"
+        )
+      else Nil
+
     val jmhDependencies = addJmhDependencies.toSeq
       .map(version => dep"${Constants.jmhOrg}:${Constants.jmhGeneratorBytecodeModule}:$version")
 
     val maybeSnapshotRepo = {
       val hasSnapshots = jvmTestRunnerDependencies.exists(_.version.endsWith("SNAPSHOT")) ||
+        jvmJavaTestRunnerDependencies.exists(_.version.endsWith("SNAPSHOT")) ||
         scalaArtifactsParamsOpt.flatMap(_.scalaNativeCliVersion).exists(_.endsWith("SNAPSHOT"))
       val hasNightlies = scalaArtifactsParamsOpt.exists(a =>
         a.params.scalaVersion.endsWith("-NIGHTLY") ||
@@ -409,6 +430,7 @@ object Artifacts {
 
     val internalDependencies =
       jvmTestRunnerDependencies.map(Positioned.none) ++
+        jvmJavaTestRunnerDependencies.map(Positioned.none) ++
         scalaOpt.toSeq.flatMap(_.internalDependencies).map(Positioned.none) ++
         jmhDependencies.map(Positioned.none)
     val updatedDependencies = dependencies ++
@@ -442,7 +464,7 @@ object Artifacts {
       fetchAnyDependenciesWithResult(
         allUpdatedDependencies,
         allExtraRepositories,
-        scalaArtifactsParamsOpt.map(_.params),
+        scalaParamsForDepResolution,
         logger,
         cache.withMessage(updatedDependenciesMessage),
         classifiersOpt = Some(Set("_") ++ (if (fetchSources) Set("sources") else Set.empty)),
@@ -453,7 +475,7 @@ object Artifacts {
     val updatedDependencies0 = value {
       coursierDeps(
         updatedDependencies,
-        scalaArtifactsParamsOpt.map(_.params),
+        scalaParamsForDepResolution,
         maybeRecoverOnError
       )
     }
@@ -530,7 +552,7 @@ object Artifacts {
                   dep"$runnerOrganization::$runnerModuleName:$runnerVersion0,intransitive"
                 )),
                 extraRepositories ++ maybeSnapshotRepo,
-                scalaArtifactsParamsOpt.map(_.params),
+                scalaParamsForDepResolution,
                 logger,
                 cache.withMessage("Downloading runner dependency")
               ).map(_.map(_._2))
@@ -551,7 +573,7 @@ object Artifacts {
           artifacts(
             Seq(posDep),
             allExtraRepositories,
-            scalaArtifactsParamsOpt.map(_.params),
+            scalaParamsForDepResolution,
             logger,
             cache0
           )
@@ -582,6 +604,7 @@ object Artifacts {
       extraSourceJars,
       scalaOpt,
       hasRunner,
+      addJvmJavaTestRunner,
       if (keepResolution) Some(fetchRes.resolution) else None
     )
   }

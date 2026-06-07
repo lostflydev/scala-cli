@@ -15,11 +15,14 @@ import scala.build.Logger
 import scala.build.errors.*
 import scala.build.internals.EnvVar
 import scala.build.testrunner.FrameworkUtils.*
-import scala.build.testrunner.{AsmTestRunner, TestRunner}
+import scala.build.testrunner.{AsmTestRunner, Logger as TestRunnerLogger, TestRunner}
 import scala.scalanative.testinterface.adapter.TestAdapter as ScalaNativeTestAdapter
 import scala.util.{Failure, Properties, Success}
 
 object Runner {
+
+  private def toTestRunnerLogger(logger: Logger): TestRunnerLogger =
+    TestRunnerLogger(logger.verbosity)
 
   def maybeExec(
     commandName: String,
@@ -222,7 +225,7 @@ object Runner {
   ): Seq[String] = {
 
     val nodePath = findInPath("node").fold("node")(_.toString)
-    val command  = Seq(nodePath, entrypoint.getAbsolutePath) ++ args
+    val command  = Seq(nodePath) ++ Seq(entrypoint.getAbsolutePath) ++ args
 
     if (jsDom)
       // FIXME We'd need to replicate what JSDOMNodeJSEnv does under-the-hood to get the command in that case.
@@ -246,7 +249,7 @@ object Runner {
         .map(_.toString)
         .toRight(NodeNotFoundError()))
     if !jsDom && allowExecve && Execve.available() then {
-      val command = Seq(nodePath, entrypoint.getAbsolutePath) ++ args
+      val command = Seq(nodePath) ++ Seq(entrypoint.getAbsolutePath) ++ args
 
       logger.log(
         s"Running ${command.mkString(" ")}",
@@ -304,6 +307,107 @@ object Runner {
     }
   }
 
+  def denoCommand(
+    entrypoint: File,
+    args: Seq[String]
+  ): Seq[String] = {
+    val denoPath  = findInPath("deno").fold("deno")(_.toString)
+    val denoFlags = Seq("run", "--allow-read")
+    Seq(denoPath) ++ denoFlags ++ Seq(entrypoint.getAbsolutePath) ++ args
+  }
+
+  def runDeno(
+    entrypoint: File,
+    args: Seq[String],
+    logger: Logger,
+    allowExecve: Boolean = false
+  ): Either[BuildException, Process] = either {
+    val denoPath: String =
+      value(findInPath("deno")
+        .map(_.toString)
+        .toRight(DenoNotFoundError()))
+    val denoFlags = Seq("run", "--allow-read")
+
+    if (allowExecve && Execve.available()) {
+      val command = Seq(denoPath) ++ denoFlags ++ Seq(entrypoint.getAbsolutePath) ++ args
+
+      logger.log(
+        s"Running ${command.mkString(" ")}",
+        "  Running" + System.lineSeparator() +
+          command.iterator.map(_ + System.lineSeparator()).mkString
+      )
+
+      logger.debug("execve available")
+      Execve.execve(
+        command.head,
+        "deno" +: command.tail.toArray,
+        sys.env.toArray.sorted.map { case (k, v) => s"$k=$v" }
+      )
+      sys.error("should not happen")
+    }
+    else {
+      val command = Seq(denoPath) ++ denoFlags ++ Seq(entrypoint.getAbsolutePath) ++ args
+
+      logger.log(
+        s"Running ${command.mkString(" ")}",
+        "  Running" + System.lineSeparator() +
+          command.iterator.map(_ + System.lineSeparator()).mkString
+      )
+
+      val builder = new ProcessBuilder(command*)
+        .inheritIO()
+      builder.start()
+    }
+  }
+
+  def bunCommand(
+    entrypoint: File,
+    args: Seq[String]
+  ): Seq[String] = {
+    val bunPath = findInPath("bun").fold("bun")(_.toString)
+    Seq(bunPath, "run", entrypoint.getAbsolutePath) ++ args
+  }
+
+  def runBun(
+    entrypoint: File,
+    args: Seq[String],
+    logger: Logger,
+    allowExecve: Boolean = false
+  ): Either[BuildException, Process] = either {
+    val bunPath: String =
+      value(findInPath("bun")
+        .map(_.toString)
+        .toRight(BunNotFoundError()))
+    val command = Seq(bunPath, "run", entrypoint.getAbsolutePath) ++ args
+
+    if (allowExecve && Execve.available()) {
+      logger.log(
+        s"Running ${command.mkString(" ")}",
+        "  Running" + System.lineSeparator() +
+          command.iterator.map(_ + System.lineSeparator()).mkString
+      )
+
+      logger.debug("execve available")
+      Execve.execve(
+        command.head,
+        "bun" +: command.tail.toArray,
+        sys.env.toArray.sorted.map { case (k, v) => s"$k=$v" }
+      )
+      sys.error("should not happen")
+    }
+    else {
+      logger.log(
+        s"Running ${command.mkString(" ")}",
+        "  Running" + System.lineSeparator() +
+          command.iterator.map(_ + System.lineSeparator()).mkString
+      )
+
+      new ProcessBuilder(command*)
+        .inheritIO()
+        .start()
+    }
+  }
+
   def runNative(
     launcher: File,
     args: Seq[String],
@@ -346,15 +450,18 @@ object Runner {
     frameworks: Seq[Framework],
     requireTests: Boolean,
     args: Seq[String],
-    parentInspector: AsmTestRunner.ParentInspector
+    parentInspector: AsmTestRunner.ParentInspector,
+    logger: Logger
   ): Either[NoTestsRun, Boolean] = frameworks
     .flatMap { framework =>
+      val trLogger = toTestRunnerLogger(logger)
       val taskDefs =
         AsmTestRunner.taskDefs(
           classPath,
           keepJars = false,
           framework.fingerprints().toIndexedSeq,
-          parentInspector
+          parentInspector,
+          trLogger
         ).toArray
 
       val runner       = framework.runner(args.toArray, Array(), null)
@@ -380,16 +487,22 @@ object Runner {
     parentInspector: AsmTestRunner.ParentInspector,
     logger: Logger
   ): Either[NoTestFrameworkFoundError, Seq[String]] = {
+    val trLogger = toTestRunnerLogger(logger)
     logger.debug("Looking for test framework services on the classpath...")
     val foundFrameworkServices =
-      AsmTestRunner.findFrameworkServices(classPath)
+      AsmTestRunner.findFrameworkServices(classPath, trLogger)
         .map(_.replace('/', '.').replace('\\', '.'))
     logger.debug(s"Found ${foundFrameworkServices.length} test framework services.")
     if foundFrameworkServices.nonEmpty then
       logger.debug(s"  - ${foundFrameworkServices.mkString("\n  - ")}")
     logger.debug("Looking for more test frameworks on the classpath...")
     val foundFrameworks =
-      AsmTestRunner.findFrameworks(classPath, TestRunner.commonTestFrameworks, parentInspector)
+      AsmTestRunner.findFrameworks(
+        classPath,
+        TestRunner.commonTestFrameworks,
+        parentInspector,
+        trLogger
+      )
         .map(_.replace('/', '.').replace('\\', '.'))
     logger.debug(s"Found ${foundFrameworks.length} additional test frameworks")
     if foundFrameworks.nonEmpty then
@@ -401,6 +514,25 @@ object Runner {
     if frameworks.nonEmpty then Right(frameworks) else Left(new NoTestFrameworkFoundError)
   }
 
+  private def jvmOnlyScalaJarsOnPlatformClassPath(
+    classPath: Seq[Path],
+    scalaBinaryVersion: String,
+    platformSuffix: String,
+    userDeclaredDepNames: Set[String]
+  ): Seq[String] =
+    if userDeclaredDepNames.isEmpty then Nil
+    else {
+      val jvmSuffix      = s"_$scalaBinaryVersion"
+      val platformMarker = s"_${platformSuffix}_"
+      val prefixes       = userDeclaredDepNames.map(n => s"$n$jvmSuffix")
+      classPath.iterator
+        .map(_.getFileName.toString)
+        .filter(_.endsWith(".jar"))
+        .filterNot(_.contains(platformMarker))
+        .filter(name => prefixes.exists(p => name.startsWith(s"$p-") || name.startsWith(s"$p.")))
+        .toList
+    }
+
   def testJs(
     classPath: Seq[Path],
     entrypoint: File,
@@ -409,7 +541,10 @@ object Runner {
     predefinedTestFrameworks: Seq[String],
     logger: Logger,
     jsDom: Boolean,
-    esModule: Boolean
+    esModule: Boolean,
+    scalaBinaryVersion: String,
+    platformSuffix: String,
+    userDeclaredDepNames: Set[String]
   ): Either[TestError, Int] = either {
     import org.scalajs.jsenv.Input
     import org.scalajs.jsenv.nodejs.NodeJSEnv
@@ -444,7 +579,7 @@ object Runner {
 
     logger.debug(s"JS tests class path: $classPath")
 
-    val parentInspector                   = new AsmTestRunner.ParentInspector(classPath)
+    val parentInspector = new AsmTestRunner.ParentInspector(classPath, toTestRunnerLogger(logger))
     val foundFrameworkNames: List[String] = predefinedTestFrameworks match {
       case f if f.nonEmpty => f.toList
       case Nil             => value(frameworkNames(classPath, parentInspector, logger)).toList
@@ -473,8 +608,16 @@ object Runner {
                |""".stripMargin
           )
 
-        if finalTestFrameworks.isEmpty then Left(new NoFrameworkFoundByBridgeError)
-        else runTests(classPath, finalTestFrameworks, requireTests, args, parentInspector)
+        if finalTestFrameworks.isEmpty then
+          Left(new NoFrameworkFoundByBridgeError(
+            jvmOnlyScalaJarsOnPlatformClassPath(
+              classPath,
+              scalaBinaryVersion,
+              platformSuffix,
+              userDeclaredDepNames
+            )
+          ))
+        else runTests(classPath, finalTestFrameworks, requireTests, args, parentInspector, logger)
       }
       finally if adapter != null then adapter.close()
 
@@ -487,12 +630,15 @@ object Runner {
     predefinedTestFrameworks: Seq[String],
     requireTests: Boolean,
     args: Seq[String],
-    logger: Logger
+    logger: Logger,
+    scalaBinaryVersion: String,
+    platformSuffix: String,
+    userDeclaredDepNames: Set[String]
   ): Either[TestError, Int] = either {
     logger.debug("Preparing to run tests with Scala Native...")
     logger.debug(s"Native tests class path: $classPath")
 
-    val parentInspector                   = new AsmTestRunner.ParentInspector(classPath)
+    val parentInspector = new AsmTestRunner.ParentInspector(classPath, toTestRunnerLogger(logger))
     val foundFrameworkNames: List[String] = predefinedTestFrameworks match {
       case f if f.nonEmpty => f.toList
       case Nil             => value(frameworkNames(classPath, parentInspector, logger)).toList
@@ -539,8 +685,16 @@ object Runner {
                |""".stripMargin
           )
 
-        if finalTestFrameworks.isEmpty then Left(new NoFrameworkFoundByBridgeError)
-        else runTests(classPath, finalTestFrameworks, requireTests, args, parentInspector)
+        if finalTestFrameworks.isEmpty then
+          Left(new NoFrameworkFoundByNativeBridgeError(
+            jvmOnlyScalaJarsOnPlatformClassPath(
+              classPath,
+              scalaBinaryVersion,
+              platformSuffix,
+              userDeclaredDepNames
+            )
+          ))
+        else runTests(classPath, finalTestFrameworks, requireTests, args, parentInspector, logger)
       }
       finally if adapter != null then adapter.close()
 

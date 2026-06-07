@@ -1,5 +1,6 @@
 package scala.cli.commands
 
+import caseapp.core.Scala3Helpers.*
 import caseapp.core.app.Command
 import caseapp.core.complete.{Completer, CompletionItem}
 import caseapp.core.help.{Help, HelpFormat}
@@ -192,7 +193,7 @@ abstract class ScalaCommand[T <: HasGlobalOptions](implicit myParser: Parser[T],
       shared <- sharedOptions(options)
       scalacOptions        = shared.scalacOptions
       updatedScalacOptions = scalacOptions.withScalacExtraOptions(shared.scalacExtra)
-      if updatedScalacOptions.map(_.noDashPrefixes).exists(ScalacOptions.ScalacPrintOptions)
+      if updatedScalacOptions.map(_.noDashPrefixes).exists(ScalacOptions.isScalacPrintOption)
       logger            = shared.logger
       fixedBuildOptions = buildOptions.copy(scalaOptions =
         buildOptions.scalaOptions.copy(defaultScalaVersion = Some(ScalaCli.getDefaultScalaVersion))
@@ -296,7 +297,7 @@ abstract class ScalaCommand[T <: HasGlobalOptions](implicit myParser: Parser[T],
 
   override def helpFormat: HelpFormat = ScalaCliHelp.helpFormat
 
-  override val messages: Help[T] =
+  private val helpWithWarnings: Help[T] =
     if shouldExcludeInSip then
       inHelp.copy(helpMessage =
         Some(HelpMessage(WarningMessages.powerCommandUsedInSip(
@@ -322,6 +323,15 @@ abstract class ScalaCommand[T <: HasGlobalOptions](implicit myParser: Parser[T],
         )
       )
     else inHelp
+
+  override def help: Help[T] = helpWithWarnings
+
+  override lazy val finalHelp: Help[?] =
+    def withName[A](h: Help[A]): Help[A] =
+      if name == h.progName then h else h.withProgName(name)
+    if hasFullHelp then withName(help.withFullHelp)
+    else if hasHelp then withName(help.withHelp)
+    else withName(help)
 
   /** @param options
     *   command-specific [[T]] options
@@ -390,6 +400,22 @@ abstract class ScalaCommand[T <: HasGlobalOptions](implicit myParser: Parser[T],
     else if isExperimental && !shouldSuppressExperimentalFeatureWarnings then
       logger.experimentalWarning(name, FeatureType.Subcommand)
 
+    if !shouldSuppressDeprecatedFeatureWarnings then
+      deprecationMessage match
+        case Some(msg) =>
+          logger.deprecationWarning(actualCommandName, msg, FeatureType.Subcommand)
+        case None =>
+          val usedNames = argvOpt.map { argv =>
+            val maxLen = names.map(_.length).max max 1
+            argv.slice(1, maxLen + 1).toList
+          }.getOrElse(List(name))
+          names.find(_ == usedNames)
+            .filter(deprecatedNames.contains)
+            .foreach { depName =>
+              val aliasStr = depName.mkString(" ")
+              logger.deprecationWarning(aliasStr, "", FeatureType.Subcommand)
+            }
+
     maybePrintWarnings(options)
     maybePrintGroupHelp(options)
     buildOptions(options).foreach { bo =>
@@ -398,6 +424,7 @@ abstract class ScalaCommand[T <: HasGlobalOptions](implicit myParser: Parser[T],
     }
     maybePrintEnvsHelp(options)
     logger.flushExperimentalWarnings
+    logger.flushDeprecationWarnings
     runCommand(options, remainingArgs, options.global.logging.logger)
   }
 }

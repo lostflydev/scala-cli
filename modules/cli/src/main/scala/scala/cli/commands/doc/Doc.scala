@@ -9,13 +9,15 @@ import java.io.File
 
 import scala.build.*
 import scala.build.EitherCps.{either, value}
+import scala.build.Ops.*
 import scala.build.compiler.{ScalaCompilerMaker, SimpleScalaCompilerMaker}
-import scala.build.errors.BuildException
+import scala.build.errors.{BuildException, CompositeBuildException}
 import scala.build.interactive.InteractiveFileOps
 import scala.build.internal.Runner
 import scala.build.options.{BuildOptions, Scope}
 import scala.cli.CurrentParams
 import scala.cli.commands.shared.{HelpCommandGroup, HelpGroup, SharedOptions}
+import scala.cli.commands.util.BuildCommandHelpers
 import scala.cli.commands.{CommandUtils, ScalaCommand, SpecificationLevel}
 import scala.cli.config.Keys
 import scala.cli.errors.ScaladocGenerationFailedError
@@ -23,7 +25,7 @@ import scala.cli.util.ArgHelpers.*
 import scala.cli.util.ConfigDbUtils
 import scala.util.Properties
 
-object Doc extends ScalaCommand[DocOptions] {
+object Doc extends ScalaCommand[DocOptions] with BuildCommandHelpers {
   override def group: String = HelpCommandGroup.Main.toString
 
   override def sharedOptions(options: DocOptions): Option[SharedOptions] = Some(options.shared)
@@ -52,36 +54,101 @@ object Doc extends ScalaCommand[DocOptions] {
         configDb.get(Keys.actions).getOrElse(None)
       )
 
+    val cross         = options.compileCross.cross.getOrElse(false)
     val withTestScope = options.shared.scope.test.getOrElse(false)
-    Build.build(
+    val buildResult   = Build.build(
       inputs,
       initialBuildOptions,
       compilerMaker,
       docCompilerMakerOpt,
       logger,
-      crossBuilds = false,
+      crossBuilds = cross,
       buildTests = withTestScope,
       partial = None,
       actionableDiagnostics = actionableDiagnostics
     )
-      .orExit(logger).docBuilds match {
+    val docBuilds = buildResult.orExit(logger).allDoc
+    docBuilds match {
       case b if b.forall(_.success) =>
         val successfulBuilds = b.collect { case s: Build.Successful => s }
-        val res0             = doDoc(
-          logger,
-          options.output.filter(_.nonEmpty),
-          options.force,
-          successfulBuilds,
-          args.unparsed,
-          withTestScope
-        )
-        res0.orExit(logger)
+        if cross && successfulBuilds.nonEmpty then
+          doDocCrossBuilds(
+            logger = logger,
+            outputOpt = options.output.filter(_.nonEmpty),
+            force = options.force,
+            allBuilds = successfulBuilds,
+            extraArgs = args.unparsed,
+            withTestScope = withTestScope
+          ).orExit(logger)
+        else
+          doDoc(
+            logger,
+            options.output.filter(_.nonEmpty),
+            options.force,
+            successfulBuilds,
+            args.unparsed,
+            withTestScope
+          ).orExit(logger)
       case b if b.exists(bb => !bb.success && !bb.cancelled) =>
-        System.err.println("Compilation failed")
+        logger.error("Compilation failed")
         sys.exit(1)
       case _ =>
-        System.err.println("Build cancelled")
+        logger.error("Build cancelled")
         sys.exit(1)
+    }
+  }
+
+  /** Determines the output subdirectory name for one cross build when using `--cross`. Used so that
+    * each Scala version (and optionally platform) gets a distinct directory.
+    */
+  def crossDocSubdirName(
+    crossParams: CrossBuildParams,
+    multipleCrossGroups: Boolean,
+    needsPlatformInSuffix: Boolean
+  ): String =
+    if !multipleCrossGroups then ""
+    else if needsPlatformInSuffix then s"${crossParams.scalaVersion}_${crossParams.platform}"
+    else crossParams.scalaVersion
+
+  private def doDocCrossBuilds(
+    logger: Logger,
+    outputOpt: Option[String],
+    force: Boolean,
+    allBuilds: Seq[Build.Successful],
+    extraArgs: Seq[String],
+    withTestScope: Boolean
+  ): Either[BuildException, Unit] = either {
+    val crossBuildGroups    = allBuilds.groupedByCrossParams.toSeq
+    val multipleCrossGroups = crossBuildGroups.size > 1
+    if multipleCrossGroups then
+      logger.message(s"Generating documentation for ${crossBuildGroups.size} cross builds...")
+    val defaultName    = "scala-doc"
+    val baseOutputPath = outputOpt.map(p => os.Path(p, Os.pwd)).getOrElse(os.pwd / defaultName)
+    val platforms      = crossBuildGroups.map(_._1.platform).distinct
+    val needsPlatformInSuffix = platforms.size > 1
+    value {
+      crossBuildGroups
+        .map { (crossParams, builds) =>
+          if multipleCrossGroups then
+            logger.message(s"Generating documentation for ${crossParams.asString}...")
+          val crossSubDir =
+            Doc.crossDocSubdirName(crossParams, multipleCrossGroups, needsPlatformInSuffix)
+          val groupOutputOpt =
+            if crossSubDir.nonEmpty then Some((baseOutputPath / crossSubDir).toString)
+            else outputOpt.filter(_.nonEmpty).orElse(Some(defaultName))
+          doDoc(
+            logger = logger,
+            outputOpt = groupOutputOpt,
+            force = force,
+            builds = builds,
+            extraArgs = extraArgs,
+            withTestScope = withTestScope
+          )
+        }
+        .sequence
+        .left
+        .map(CompositeBuildException(_))
+        .map(_ => ())
     }
   }
 
@@ -106,7 +173,7 @@ object Doc extends ScalaCommand[DocOptions] {
         builds.head.options.interactive.map { interactive =>
           InteractiveFileOps.erasingPath(interactive, printableDest, destPath) { () =>
             val msg = s"$printableDest already exists"
-            System.err.println(s"Error: $msg. Pass -f or --force to force erasing it.")
+            logger.error(s"$msg. Pass -f or --force to force erasing it.")
             sys.exit(1)
           }
         }
@@ -118,6 +185,7 @@ object Doc extends ScalaCommand[DocOptions] {
 
     val docJarPath = value(generateScaladocDirPath(builds, logger, extraArgs, withTestScope))
     value(alreadyExistsCheck())
+    os.makeDir.all(destPath / os.up)
     if force then os.copy.over(docJarPath, destPath) else os.copy(docJarPath, destPath)
 
     val printableOutput = CommandUtils.printablePath(destPath)
@@ -125,16 +193,26 @@ object Doc extends ScalaCommand[DocOptions] {
     logger.message(s"Wrote Scaladoc to $printableOutput")
   }
 
+  private def javadocBaseUrl(javaVersion: Int): String =
+    if javaVersion >= 11 then
+      s"https://docs.oracle.com/en/java/javase/$javaVersion/docs/api/java.base/"
+    else
+      s"https://docs.oracle.com/javase/$javaVersion/docs/api/"
+
+  private def scaladocBaseUrl(scalaVersion: String): String =
+    s"https://scala-lang.org/api/$scalaVersion/"
+
   // from https://github.com/VirtusLab/scala-cli/pull/103/files#diff-1039b442cbd23f605a61fdb9c3620b600aa4af6cab757932a719c54235d8e402R60
-  private def defaultScaladocArgs = Seq(
-    "-snippet-compiler:compile",
-    "-Ygenerate-inkuire",
-    "-external-mappings:" +
-      ".*/scala/.*::scaladoc3::https://scala-lang.org/api/3.x/," +
-      ".*/java/.*::javadoc::https://docs.oracle.com/javase/8/docs/api/",
-    "-author",
-    "-groups"
-  )
+  private[commands] def defaultScaladocArgs(scalaVersion: String, javaVersion: Int): Seq[String] =
+    Seq(
+      "-snippet-compiler:compile",
+      "-Ygenerate-inkuire",
+      "-external-mappings:" +
+        s".*/scala/.*::scaladoc3::${scaladocBaseUrl(scalaVersion)}," +
+        s".*/java/.*::javadoc::${javadocBaseUrl(javaVersion)}",
+      "-author",
+      "-groups"
+    )
 
   def generateScaladocDirPath(
     builds: Seq[Build.Successful],
@@ -171,10 +249,11 @@ object Doc extends ScalaCommand[DocOptions] {
           "-d",
           destDir.toString
         )
+        val javaVersion = builds.head.options.javaHome().value.version
         val defaultArgs =
           if builds.head.options.notForBloopOptions.packageOptions.useDefaultScaladocOptions
               .getOrElse(true)
-          then defaultScaladocArgs
+          then defaultScaladocArgs(scalaParams.scalaVersion, javaVersion)
           else Nil
         val args = baseArgs ++
           builds.head.project.scalaCompiler.map(_.scalacOptions).getOrElse(Nil) ++

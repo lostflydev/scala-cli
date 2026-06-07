@@ -54,6 +54,13 @@ object Keys {
     specificationLevel = SpecificationLevel.IMPLEMENTATION,
     description = "Globally enables actionable diagnostics. Enabled by default."
   )
+  val autoSetupIde = new Key.BooleanEntry(
+    prefix = Seq("ide"),
+    name = "auto-setup",
+    specificationLevel = SpecificationLevel.IMPLEMENTATION,
+    description =
+      "Globally controls whether the BSP configuration in `.bsp/` is generated automatically by build commands. Enabled by default."
+  )
   val interactive = new Key.BooleanEntry(
     prefix = Seq.empty,
     name = "interactive",
@@ -148,6 +155,15 @@ object Keys {
   // Kept for binary compatibility
   val repositoriesMirrors: Key.StringListEntry = repositoryMirrors
 
+  val deprecatedTestKey = new Key.BooleanEntry(
+    prefix = Seq("test"),
+    name = "deprecated-key",
+    specificationLevel = SpecificationLevel.IMPLEMENTATION,
+    description = "Deprecated test key (internal, do not use).",
+    hidden = true,
+    deprecationMessage = Some("For testing purposes only.")
+  )
+
   // setting indicating if the global interactive mode was suggested
   val globalInteractiveWasSuggested = new Key.BooleanEntry(
     prefix = Seq.empty,
@@ -175,7 +191,9 @@ object Keys {
 
   def all: Seq[Key[?]] = Seq[Key[?]](
     actions,
+    autoSetupIde,
     defaultRepositories,
+    deprecatedTestKey,
     ghToken,
     globalInteractiveWasSuggested,
     interactive,

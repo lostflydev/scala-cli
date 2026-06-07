@@ -52,6 +52,7 @@ Available keys:
   - httpProxy.address                              HTTP proxy address.
   - httpProxy.password                             HTTP proxy password (used for authentication).
   - httpProxy.user                                 HTTP proxy user (used for authentication).
+  - ide.auto-setup                                 Globally controls whether the BSP configuration in `.bsp/` is generated automatically by build commands. Enabled by default.
   - interactive                                    Globally enables interactive mode (the '--interactive' flag).
   - interactive-was-suggested                      Setting indicating if the global interactive mode was already suggested.
   - java.properties                                Java properties for Scala CLI's execution.
@@ -71,6 +72,7 @@ Available keys:
   - suppress-warning.directives-in-multiple-files  Globally suppresses warnings about directives declared in multiple source files.
   - suppress-warning.experimental-features         Globally suppresses warnings about experimental features.
   - suppress-warning.outdated-dependencies-files   Globally suppresses warnings about outdated dependencies.
+  - test.deprecated-key                            Deprecated test key (internal, do not use).
 
 For detailed documentation refer to our website: https://scala-cli.virtuslab.org/docs/commands/config
 
@@ -88,13 +90,13 @@ All supported types of inputs can be mixed with each other.
 
 For detailed documentation refer to our website: https://scala-cli.virtuslab.org/docs/commands/doc
 
-Accepts option groups: [benchmarking](./cli-options.md#benchmarking-options), [compilation server](./cli-options.md#compilation-server-options), [coursier](./cli-options.md#coursier-options), [debug](./cli-options.md#debug-options), [dependency](./cli-options.md#dependency-options), [doc](./cli-options.md#doc-options), [global suppress warning](./cli-options.md#global-suppress-warning-options), [help group](./cli-options.md#help-group-options), [input](./cli-options.md#input-options), [jvm](./cli-options.md#jvm-options), [logging](./cli-options.md#logging-options), [markdown](./cli-options.md#markdown-options), [power](./cli-options.md#power-options), [python](./cli-options.md#python-options), [Scala.js](./cli-options.md#scalajs-options), [Scala Native](./cli-options.md#scala-native-options), [scalac](./cli-options.md#scalac-options), [scalac extra](./cli-options.md#scalac-extra-options), [scope](./cli-options.md#scope-options), [semantic db](./cli-options.md#semantic-db-options), [shared](./cli-options.md#shared-options), [snippet](./cli-options.md#snippet-options), [source generator](./cli-options.md#source-generator-options), [suppress warning](./cli-options.md#suppress-warning-options), [verbosity](./cli-options.md#verbosity-options), [version](./cli-options.md#version-options), [workspace](./cli-options.md#workspace-options)
+Accepts option groups: [benchmarking](./cli-options.md#benchmarking-options), [compilation server](./cli-options.md#compilation-server-options), [coursier](./cli-options.md#coursier-options), [cross](./cli-options.md#cross-options), [debug](./cli-options.md#debug-options), [dependency](./cli-options.md#dependency-options), [doc](./cli-options.md#doc-options), [global suppress warning](./cli-options.md#global-suppress-warning-options), [help group](./cli-options.md#help-group-options), [input](./cli-options.md#input-options), [jvm](./cli-options.md#jvm-options), [logging](./cli-options.md#logging-options), [markdown](./cli-options.md#markdown-options), [power](./cli-options.md#power-options), [python](./cli-options.md#python-options), [Scala.js](./cli-options.md#scalajs-options), [Scala Native](./cli-options.md#scala-native-options), [scalac](./cli-options.md#scalac-options), [scalac extra](./cli-options.md#scalac-extra-options), [scope](./cli-options.md#scope-options), [semantic db](./cli-options.md#semantic-db-options), [shared](./cli-options.md#shared-options), [snippet](./cli-options.md#snippet-options), [source generator](./cli-options.md#source-generator-options), [suppress warning](./cli-options.md#suppress-warning-options), [verbosity](./cli-options.md#verbosity-options), [version](./cli-options.md#version-options), [workspace](./cli-options.md#workspace-options)
 
 ### repl
 
 Aliases: `console`
 
-Fire-up a Scala REPL.
+Fire-up a REPL (Scala REPL by default, JShell for pure-Java projects).
 
 The entire Scala CLI project's classpath is loaded to the repl.
 
@@ -190,11 +192,11 @@ Accepts option groups: [benchmarking](./cli-options.md#benchmarking-options), [c
 
 ### test
 
-Compile and test Scala code.
+Compile and test Scala (or Java) code.
 
 Test sources are compiled separately (after the 'main' sources), and may use different dependencies, compiler options, and other configurations.
 A source file is treated as a test source if:
-  - the file name ends with `.test.scala`
+  - the file name ends with `.test.scala` or `.test.java`
   - the file comes from a directory that is provided as input, and the relative path from that file to its original directory contains a `test` directory
   - it contains the `//> using target.scope test` directive (Experimental)
 

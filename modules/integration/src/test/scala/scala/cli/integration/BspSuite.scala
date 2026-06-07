@@ -22,9 +22,12 @@ import scala.util.{Failure, Success, Try}
 
 trait BspSuite { this: ScalaCliSuite =>
   protected def extraOptions: Seq[String]
-  def initParams(root: os.Path): b.InitializeBuildParams =
+  def initParams(
+    root: os.Path,
+    clientName: String = "Scala CLI ITs"
+  ): b.InitializeBuildParams =
     new b.InitializeBuildParams(
-      "Scala CLI ITs",
+      clientName,
       "0",
       Constants.bspVersion,
       root.toNIO.toUri.toASCIIString,
@@ -74,7 +77,8 @@ trait BspSuite { this: ScalaCliSuite =>
     bspEnvs: Map[String, String] = Map.empty,
     reuseRoot: Option[os.Path] = None,
     stdErrOpt: Option[os.RelPath] = None,
-    extraOptionsOverride: Seq[String] = extraOptions
+    extraOptionsOverride: Seq[String] = extraOptions,
+    bspClientName: String = "Scala CLI ITs"
   )(
     f: (
       os.Path,
@@ -91,7 +95,8 @@ trait BspSuite { this: ScalaCliSuite =>
     bspEnvs,
     reuseRoot,
     stdErrOpt,
-    extraOptionsOverride
+    extraOptionsOverride,
+    bspClientName
   )((root, client, server, _: b.InitializeBuildResult) => f(root, client, server))
 
   def withBspInitResults[T](
@@ -103,7 +108,8 @@ trait BspSuite { this: ScalaCliSuite =>
     bspEnvs: Map[String, String] = Map.empty,
     reuseRoot: Option[os.Path] = None,
     stdErrOpt: Option[os.RelPath] = None,
-    extraOptionsOverride: Seq[String] = extraOptions
+    extraOptionsOverride: Seq[String] = extraOptions,
+    bspClientName: String = "Scala CLI ITs"
   )(
     f: (
       os.Path,
@@ -120,20 +126,24 @@ trait BspSuite { this: ScalaCliSuite =>
       val stdErrPathOpt: Option[os.ProcessOutput] = stdErrOpt.map(path => root / path)
       val stderr: os.ProcessOutput                = stdErrPathOpt.getOrElse(os.Inherit)
 
-      val proc = os.proc(TestUtil.cli, "bsp", bspOptions ++ extraOptionsOverride, args)
-        .spawn(cwd = root, stderr = stderr, env = bspEnvs)
+      val proc = trackSubprocess(
+        os.proc(TestUtil.cli, "bsp", bspOptions ++ extraOptionsOverride, args)
+          .spawn(cwd = root, stderr = stderr, env = bspEnvs)
+      )
       var remoteServer
         : b.BuildServer & b.ScalaBuildServer & b.JavaBuildServer & b.JvmBuildServer &
           TestBspClient.WrappedSourcesBuildServer = null
 
       val bspServerExited = Promise[Unit]()
-      val t               = new Thread("bsp-server-watcher") {
-        setDaemon(true)
-        override def run() = {
-          proc.join()
-          bspServerExited.success(())
+      val t               = trackThread(
+        new Thread("bsp-server-watcher") {
+          setDaemon(true)
+          override def run() = {
+            proc.join()
+            bspServerExited.success(())
+          }
         }
-      }
+      )
       t.start()
 
       def whileBspServerIsRunning[T](f: Future[T]): Future[T] = {
@@ -147,11 +157,14 @@ trait BspSuite { this: ScalaCliSuite =>
       }
 
       try {
-        val (localClient, remoteServer0, _) =
+        val (localClient, remoteServer0, listeningFuture) =
           TestBspClient.connect(proc.stdout, proc.stdin, pool)
+        trackFuture(listeningFuture)
         remoteServer = remoteServer0
         val initRes: b.InitializeBuildResult = Await.result(
-          whileBspServerIsRunning(remoteServer.buildInitialize(initParams(root)).asScala),
+          whileBspServerIsRunning(
+            remoteServer.buildInitialize(initParams(root, bspClientName)).asScala
+          ),
           Duration.Inf
         )
         Await.result(
@@ -171,6 +184,7 @@ trait BspSuite { this: ScalaCliSuite =>
         proc.destroy()
         proc.join(2.seconds.toMillis)
         proc.destroy(shutdownGracePeriod = 0)
+        proc.join()
       }
     }
 

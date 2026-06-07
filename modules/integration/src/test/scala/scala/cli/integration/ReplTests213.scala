@@ -1,6 +1,9 @@
 package scala.cli.integration
 
-class ReplTests213 extends ReplTestDefinitions with ReplAmmoniteTestDefinitions with Test213 {
+class ReplTests213
+    extends ReplTestDefinitions
+    with ReplJShellTestDefinitions
+    with Test213 {
   for {
     withExplicitScala2SnapshotRepo <- Seq(true, false)
     nightlyVersion      = "2.13.nightly"

@@ -4,7 +4,9 @@ import com.eed3si9n.expecty.Expecty.expect
 
 import java.io.File
 
+import scala.cli.integration.TestUtil.ProcOps
 import scala.cli.integration.util.BloopUtil
+import scala.concurrent.duration.DurationInt
 import scala.util.Properties
 
 abstract class CompileTestDefinitions
@@ -60,9 +62,7 @@ abstract class CompileTestDefinitions
         |""".stripMargin
   )
 
-  test(
-    "java files with no using directives should not produce warnings about using directives in multiple files"
-  ) {
+  {
     val inputs = TestInputs(
       os.rel / "Bar.java" ->
         """public class Bar {}
@@ -71,12 +71,23 @@ abstract class CompileTestDefinitions
         """public class Foo {}
           |""".stripMargin
     )
-
-    inputs.fromRoot { root =>
-      val warningMessage = "Using directives detected in multiple files"
-      val output         = os.proc(TestUtil.cli, "compile", extraOptions, ".")
-        .call(cwd = root, stderr = os.Pipe).err.trim()
-      expect(!output.contains(warningMessage))
+    test(
+      "java files with no using directives should not produce warnings about using directives in multiple files"
+    ) {
+      inputs.fromRoot { root =>
+        val warningMessage = "Using directives detected in multiple files"
+        val output         = os.proc(TestUtil.cli, "compile", extraOptions, ".")
+          .call(cwd = root, stderr = os.Pipe).err.trim()
+        expect(!output.contains(warningMessage))
+      }
+    }
+    test("Pure Java with --server=false: no warning about .java files not being compiled") {
+      inputs.fromRoot { root =>
+        val warningMessage = ".java files are not compiled to .class files"
+        val output         = os.proc(TestUtil.cli, "compile", "--server=false", extraOptions, ".")
+          .call(cwd = root, stderr = os.Pipe).err.text()
+        expect(!output.contains(warningMessage))
+      }
     }
   }
 
@@ -138,7 +149,7 @@ abstract class CompileTestDefinitions
   }
 
   test(
-    "having target + using directives in files should not produce warnings about using directives in multiple files"
+    "having target + using directives in files: no using-directives or .java-not-compiled warnings"
   ) {
     val inputs = TestInputs(
       os.rel / "Bar.java" ->
@@ -158,14 +169,14 @@ abstract class CompileTestDefinitions
       val output         = os.proc(TestUtil.cli, "--power", "compile", extraOptions, ".")
         .call(cwd = root).err.trim()
       expect(!output.contains(warningMessage))
+      expect(!output.contains(".java files are not compiled to .class files"))
     }
   }
 
-  test(
-    "warn about directives in multiple files"
-  ) {
-    val inputs = TestInputs(
-      os.rel / "Bar.java" ->
+  {
+    val javaSourceFile = "Bar.java"
+    val inputs         = TestInputs(
+      os.rel / javaSourceFile ->
         """//> using jvm 17
           |public class Bar {}
           |""".stripMargin,
@@ -174,18 +185,58 @@ abstract class CompileTestDefinitions
           |class Foo {}
           |""".stripMargin
     )
+    test("warn about directives in multiple files") {
+      inputs.fromRoot { root =>
+        val warningMessage = "Using directives detected in multiple files"
+        val output         = os.proc(TestUtil.cli, "--power", "compile", extraOptions, ".")
+          .call(cwd = root, stderr = os.Pipe).err.trim()
+        expect(output.contains(warningMessage))
+      }
+    }
 
-    inputs.fromRoot { root =>
-      val warningMessage = "Using directives detected in multiple files"
-      val output         = os.proc(TestUtil.cli, "--power", "compile", extraOptions, ".")
-        .call(cwd = root, stderr = os.Pipe).err.trim()
-      expect(output.contains(warningMessage))
+    test("mixed .java/.scala: with --server=false warn about .java not compiled") {
+      inputs.fromRoot { root =>
+        val warningMessage = ".java files are not compiled to .class files"
+        val output         =
+          os.proc(TestUtil.cli, "--power", "compile", extraOptions, ".", "--server=false")
+            .call(cwd = root, stderr = os.Pipe).err.trim()
+        expect(output.contains(warningMessage))
+        expect(output.contains(javaSourceFile))
+      }
     }
   }
 
   test("no arg") {
     simpleInputs.fromRoot { root =>
       os.proc(TestUtil.cli, "compile", extraOptions, ".").call(cwd = root)
+    }
+  }
+
+  test("compile auto setup-ide enabled by default") {
+    TestInputs(
+      os.rel / "Main.scala" ->
+        """object Main {
+          |  def main(args: Array[String]): Unit = println("Hello")
+          |}
+          |""".stripMargin
+    ).fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      os.proc(TestUtil.cli, "compile", extraOptions, ".").call(cwd = root)
+      assert(os.exists(bspEntry))
+    }
+  }
+
+  test("compile can disable auto setup-ide via --auto-setup-ide=false") {
+    TestInputs(
+      os.rel / "Main.scala" ->
+        """object Main {
+          |  def main(args: Array[String]): Unit = println("Hello")
+          |}
+          |""".stripMargin
+    ).fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      os.proc(TestUtil.cli, "compile", extraOptions, ".", "--auto-setup-ide=false").call(cwd = root)
+      assert(!os.exists(bspEntry))
     }
   }
 
@@ -697,7 +748,9 @@ abstract class CompileTestDefinitions
       }
   }
 
-  test("pass java options to scalac when server=false") {
+  test(
+    "pass java options to scalac when server=false (Scala-only, no .java-not-compiled warning)"
+  ) {
     val inputs = TestInputs(
       os.rel / "Main.scala" ->
         """object Main extends App {
@@ -719,6 +772,7 @@ abstract class CompileTestDefinitions
       val out = res.out.text()
       expect(out.contains("Error occurred during initialization of VM"))
       expect(out.contains("Too small maximum heap"))
+      expect(!out.contains(".java files are not compiled to .class files"))
     }
   }
 
@@ -905,6 +959,58 @@ abstract class CompileTestDefinitions
             |[error] //> using unrecognised.directive value1 value2
             |[error]           ^^^^^^^^^^^^^^^^^^^^^^""".stripMargin
       )
+    }
+  }
+
+  if (!Properties.isMac || !TestUtil.isCI)
+    test("--watching with --watch re-compiles on external file change") {
+      val sourceFile   = os.rel / "Main.scala"
+      val externalFile = os.rel / "data" / "input.txt"
+      TestInputs(
+        sourceFile ->
+          """object Main {
+            |  def value = 1
+            |}
+            |""".stripMargin,
+        externalFile -> "Hello"
+      ).fromRoot { root =>
+        TestUtil.withProcessWatching(
+          proc = os.proc(
+            TestUtil.cli,
+            "--power",
+            "compile",
+            ".",
+            "--watch",
+            "--watching",
+            "data",
+            extraOptions
+          )
+            .spawn(cwd = root, stderr = os.Pipe),
+          timeout = 120.seconds
+        ) { (proc, timeout, ec) =>
+          implicit val ec0  = ec
+          val initialOutput = proc.readStderrUntilWatchingMessage(timeout)
+          expect(initialOutput.exists(_.contains("Compiled")))
+
+          Thread.sleep(2000L)
+          os.write.over(root / externalFile, "World")
+
+          val rerunOutput = proc.readStderrUntilWatchingMessage(timeout)
+          expect(rerunOutput.nonEmpty)
+        }
+      }
+    }
+
+  test("sbt file in directory does not break compile") {
+    TestInputs(
+      os.rel / "Main.scala" ->
+        """object Main {
+          |  def main(args: Array[String]): Unit = println("Hello")
+          |}
+          |""".stripMargin,
+      os.rel / "build.sbt" -> """name := "my-project""""
+    ).fromRoot { root =>
+      os.proc(TestUtil.cli, "compile", extraOptions, ".").call(cwd = root)
     }
   }
 }

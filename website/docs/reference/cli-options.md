@@ -246,7 +246,7 @@ Disable using the network to download artifacts, use the local cache only
 
 Available in commands:
 
-[`compile`](./commands.md#compile), [`package`](./commands.md#package), [`publish`](./commands.md#publish), [`publish local`](./commands.md#publish-local), [`repl` , `console`](./commands.md#repl), [`run`](./commands.md#run), [`shebang`](./commands.md#shebang), [`test`](./commands.md#test)
+[`compile`](./commands.md#compile), [`doc`](./commands.md#doc), [`package`](./commands.md#package), [`publish`](./commands.md#publish), [`publish local`](./commands.md#publish-local), [`repl` , `console`](./commands.md#repl), [`run`](./commands.md#run), [`shebang`](./commands.md#shebang), [`test`](./commands.md#test)
 
 <!-- Automatically generated, DO NOT EDIT MANUALLY -->
 
@@ -384,11 +384,11 @@ Project name to be used on Mill build file
 
 ### `--sbt-version`
 
-Version of SBT to be used for the export (1.12.4 by default)
+Version of SBT to be used for the export (1.12.5 by default)
 
 ### `--mill-version`
 
-Version of Mill to be used for the export (1.1.2 by default)
+Version of Mill to be used for the export (1.1.6 by default)
 
 ### `--mvn-version`
 
@@ -396,7 +396,7 @@ Version of Maven Compiler Plugin to be used for the export (3.8.1 by default)
 
 ### `--mvn-scala-version`
 
-Version of Maven Scala Plugin to be used for the export (4.9.1 by default)
+Version of Maven Scala Plugin to be used for the export (4.9.10 by default)
 
 ### `--mvn-exec-plugin-version`
 
@@ -505,7 +505,7 @@ Pass a global dialect for scalafmt. This overrides whatever value is configured 
 
 Aliases: `--fmt-version`
 
-Pass scalafmt version before running it (3.10.7 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
+Pass scalafmt version before running it (3.11.1 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
 
 ## Global suppress warning options
 
@@ -590,6 +590,12 @@ Show options for Scala REPL
 Aliases: `--fmt-help`, `--help-fmt`, `--scalafmt-help`
 
 Show options for Scalafmt
+
+### `--help-wasm`
+
+Aliases: `--wasm-help`
+
+Show options for WebAssembly
 
 ## Install completions options
 
@@ -1088,6 +1094,24 @@ Proceed as if publishing, but do not upload / write artifacts to the remote repo
 ### `--parallel-upload`
 
 [Internal]
+## Publish local options
+
+Available in commands:
+
+[`publish local`](./commands.md#publish-local)
+
+<!-- Automatically generated, DO NOT EDIT MANUALLY -->
+
+### `--m2`
+
+Aliases: `--maven-local`
+
+Publish to the local Maven repository (defaults to ~/.m2/repository) instead of Ivy2 local
+
+### `--m2-home`
+
+Set the local Maven repository path (defaults to ~/.m2/repository)
+
 ## Publish params options
 
 Available in commands:
@@ -1244,24 +1268,15 @@ Available in commands:
 
 <!-- Automatically generated, DO NOT EDIT MANUALLY -->
 
-### `--ammonite`
+### `--jshell`
 
-Aliases: `-A`, `--amm`
+Aliases: `--jsh`
 
-Use Ammonite (instead of the default Scala REPL)
+Use JShell as the REPL (default for pure-Java projects). Requires JDK >= 9.
 
-### `--ammonite-version`
+### `--repl-init-script-file`
 
-Aliases: `--ammonite-ver`
-
-Set the Ammonite version (3.0.8 by default)
-
-### `--ammonite-arg`
-
-Aliases: `-a`
-
-[Internal]
-Provide arguments for ammonite repl
+Read the REPL init script (--repl-init-script) from a file. Mutually exclusive with --repl-init-script.
 
 ### `--repl-dry-run`
 
@@ -1329,7 +1344,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 ### `--js-version`
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 ### `--js-mode`
 
@@ -1364,7 +1379,11 @@ Enable jsdom
 
 ### `--js-emit-wasm`
 
-Emit WASM
+Enable Wasm output (Scala.js Wasm backend). Uses Node.js by default. To show more options for Wasm pass `--help-wasm`
+
+### `--js-runtime`
+
+JS runtime to run the output on: node (default), deno, bun
 
 ### `--js-header`
 
@@ -1402,7 +1421,7 @@ Path to the Scala.js linker
 ### `--js-cli-version`
 
 [Internal]
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 ### `--js-cli-java-arg`
 
@@ -1428,7 +1447,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 ### `--native-version`
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 ### `--native-mode`
 
@@ -1605,7 +1624,7 @@ Available in commands:
 
 Aliases: `-S`, `--scala`
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 ### `--scala-binary-version`
 
@@ -1679,7 +1698,7 @@ Copy compilation results to output directory using either relative or absolute p
 
 Aliases: `--toolkit`
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 ### `--exclude`
 
@@ -1688,6 +1707,26 @@ Exclude sources
 ### `--object-wrapper`
 
 Force object wrapper for scripts
+
+### `--auto-setup-ide`
+
+Aliases: `--auto-setup-bsp`
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+### [deprecated] `--deprecated-test-option`
+
+**Deprecated**: For testing purposes only.
+
+[Internal]
+Deprecated test option (internal, do not use)
+
+### `--deprecated-test-alias-option`
+
+Aliases: [deprecated] `--deprecated-test-alias`
+
+[Internal]
+Option with deprecated alias (internal, do not use)
 
 ## Snippet options
 
@@ -1956,6 +1995,12 @@ Run the application in the background, automatically wake the thread and re-run 
 Aliases: `--revolver`
 
 Run the application in the background, automatically kill the process and restart if sources have been changed
+
+### `--watching`
+
+Aliases: `--watching-path`
+
+Watch additional paths for changes (used together with --watch or --restart)
 
 ## Internal options 
 ### Add path options

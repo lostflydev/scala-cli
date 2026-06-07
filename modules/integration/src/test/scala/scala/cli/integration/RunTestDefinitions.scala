@@ -123,6 +123,38 @@ abstract class RunTestDefinitions
     }
   }
 
+  test("run auto setup-ide enabled by default") {
+    TestInputs(
+      os.rel / "Main.scala" ->
+        """object Main {
+          |  def main(args: Array[String]): Unit = println("Hello from run")
+          |}
+          |""".stripMargin
+    ).fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      val res      = os.proc(TestUtil.cli, "run", extraOptions, ".").call(cwd = root)
+      expect(res.out.trim() == "Hello from run")
+      assert(os.exists(bspEntry))
+    }
+  }
+
+  test("run can disable auto setup-ide via --auto-setup-ide=false") {
+    TestInputs(
+      os.rel / "Main.scala" ->
+        """object Main {
+          |  def main(args: Array[String]): Unit = println("Hello from run")
+          |}
+          |""".stripMargin
+    ).fromRoot { root =>
+      val bspEntry = root / ".bsp" / "scala-cli.json"
+      val res = os.proc(TestUtil.cli, "run", extraOptions, ".", "--auto-setup-ide=false").call(cwd =
+        root
+      )
+      expect(res.out.trim() == "Hello from run")
+      assert(!os.exists(bspEntry))
+    }
+  }
+
   test("Debugging") {
     val inputs = TestInputs(
       os.rel / "Foo.scala" ->
@@ -1334,13 +1366,14 @@ abstract class RunTestDefinitions
 
   test("should add typelevel toolkit-test to classpath") {
     val inputs = TestInputs(
-      os.rel / "Hello.test.scala" ->
+      os.rel / "HelloSuite.test.scala" ->
         s"""|import cats.effect.*
-            |import munit.CatsEffectSuite
-            |class HelloSuite extends CatsEffectSuite {
-            |  // IO should be added to classpath by typelevel toolkit-test
+            |import weaver._
+            |
+            |object HelloSuite extends SimpleIOSuite {
             |  test("warm hello from the sun is coming") {
-            |    (IO("i love to live in the") *> IO("sun")).assertEquals("sun")
+            |    IO.println("typelevel-toolkit-test-ok") *>
+            |      (IO("i love to live in the") *> IO("sun")).map(expect.eql(_, "sun"))
             |  }
             |}""".stripMargin
     )
@@ -1354,7 +1387,7 @@ abstract class RunTestDefinitions
       )
         .call(cwd = root).out.text()
 
-      expect(output.contains("+")) // test succeeded
+      expect(output.contains("typelevel-toolkit-test-ok"))
     }
   }
 
@@ -2510,4 +2543,19 @@ abstract class RunTestDefinitions
         processes.foreach { case (p, _) => expect(p.exitCode() == 0) }
       }
     }
+
+  test("sbt file in directory does not break run") {
+    val message = "Hello from run"
+    TestInputs(
+      os.rel / "Main.scala" ->
+        s"""object Main {
+           |  def main(args: Array[String]): Unit = println("$message")
+           |}
+           |""".stripMargin,
+      os.rel / "build.sbt" -> """name := "my-project""""
+    ).fromRoot { root =>
+      val output = os.proc(TestUtil.cli, extraOptions, ".").call(cwd = root).out.trim()
+      expect(output == message)
+    }
+  }
 }

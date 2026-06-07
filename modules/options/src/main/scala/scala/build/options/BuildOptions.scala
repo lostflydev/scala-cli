@@ -46,11 +46,28 @@ final case class BuildOptions(
   mainClass: Option[String] = None,
   testOptions: TestOptions = TestOptions(),
   notForBloopOptions: PostBuildOptions = PostBuildOptions(),
+  watchOptions: WatchOptions = WatchOptions(),
   sourceGeneratorOptions: SourceGeneratorOptions = SourceGeneratorOptions(),
   useBuildServer: Option[Boolean] = None
 ) {
 
   import BuildOptions.JavaHomeInfo
+
+  /** When the build workspace was moved to a virtual directory (e.g. after
+    * [[scala.build.input.Inputs.checkAttributes]] fallback) and the user did not set an explicit
+    * semanticdb source root, use the given original workspace so semanticdb paths stay relative to
+    * the user's project root.
+    */
+  def withResolvedSemanticDbSourceRoot(originalWorkspace: os.Path): BuildOptions =
+    if scalaOptions.semanticDbOptions.semanticDbSourceRoot.isEmpty then
+      copy(scalaOptions =
+        scalaOptions.copy(
+          semanticDbOptions = scalaOptions.semanticDbOptions.copy(
+            semanticDbSourceRoot = Some(originalWorkspace)
+          )
+        )
+      )
+    else this
 
   lazy val platform: Positioned[Platform] =
     scalaOptions.platform.getOrElse(Positioned(List(Position.Custom("DEFAULT")), Platform.JVM))
@@ -221,6 +238,10 @@ final case class BuildOptions(
   private def addJvmTestRunner: Boolean =
     platform.value == Platform.JVM &&
     internalDependencies.addTestRunnerDependency
+
+  private def addJvmJavaTestRunner: Boolean =
+    platform.value == Platform.JVM &&
+    internalDependencies.addTestRunnerDependency
   private def addJsTestBridge: Option[String] =
     if (platform.value == Platform.JS && internalDependencies.addTestRunnerDependency)
       Some(scalaJsOptions.finalVersion)
@@ -256,7 +277,16 @@ final case class BuildOptions(
   private val scala2NightlyRepo = Seq(coursier.Repositories.scalaIntegration.root)
   private val scala3NightlyRepo = Seq(RepositoryUtils.scala3NightlyRepository.root)
 
-  def finalRepositories: Either[BuildException, Seq[Repository]] = either {
+  def finalRepositories: Either[BuildException, Seq[Repository]] =
+    finalRepositories(includeUserExtraRepositories = true)
+
+  /** @param includeUserExtraRepositories
+    *   when false, repositories from `//> using repository` are omitted (nightly, internal local,
+    *   and snapshot repositories are kept).
+    */
+  def finalRepositories(
+    includeUserExtraRepositories: Boolean
+  ): Either[BuildException, Seq[Repository]] = either {
     val maybeSv = scalaOptions.scalaVersion
       .map(_.asString)
       .orElse(scalaOptions.defaultScalaVersion)
@@ -272,7 +302,10 @@ final case class BuildOptions(
           RepositoryUtils.scala3NightlyRepository
         )
       else Nil
-    val extraRepositories = classPathOptions.extraRepositories.filterNot(_ == "snapshots")
+    val userExtraRepositories = classPathOptions.extraRepositories.filterNot(_ == "snapshots")
+    val extraRepositories     =
+      if includeUserExtraRepositories then userExtraRepositories
+      else Nil
 
     val repositories = nightlyRepos ++
       extraRepositories ++
@@ -475,6 +508,7 @@ final case class BuildOptions(
       if (scalaArtifactsParamsOpt.isDefined) None
       else Some(false) // no runner in pure Java mode
     }
+    val isJavaBuild                        = scalaArtifactsParamsOpt.isEmpty
     val extraRepositories: Seq[Repository] = value(finalRepositories)
     val maybeArtifacts                     = Artifacts(
       scalaArtifactsParamsOpt = scalaArtifactsParamsOpt,
@@ -489,7 +523,8 @@ final case class BuildOptions(
       fetchSources = classPathOptions.fetchSources.getOrElse(false),
       jvmVersion = javaHome().value.version,
       addJvmRunner = addRunnerDependency0,
-      addJvmTestRunner = isTests && addJvmTestRunner,
+      addJvmTestRunner = isTests && addJvmTestRunner && !isJavaBuild,
+      addJvmJavaTestRunner = isTests && addJvmJavaTestRunner && isJavaBuild,
       addJmhDependencies = jmhOptions.finalJmhVersion,
       extraRepositories = extraRepositories,
       keepResolution = internal.keepResolution,

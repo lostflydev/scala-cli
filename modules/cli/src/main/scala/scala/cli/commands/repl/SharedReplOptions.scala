@@ -4,7 +4,7 @@ import caseapp.*
 import caseapp.core.help.Help
 
 import scala.cli.commands.shared.{CrossOptions, HelpGroup, SharedJavaOptions, SharedWatchOptions}
-import scala.cli.commands.{Constants, tags}
+import scala.cli.commands.tags
 
 // format: off
 final case class SharedReplOptions(
@@ -16,27 +16,18 @@ final case class SharedReplOptions(
     compileCross: CrossOptions = CrossOptions(),
 
   @Group(HelpGroup.Repl.toString)
-  @Tag(tags.restricted)
+  @Tag(tags.implementation)
   @Tag(tags.inShortHelp)
-  @HelpMessage("Use Ammonite (instead of the default Scala REPL)")
-  @Name("A")
-  @Name("amm")
-    ammonite: Option[Boolean] = None,
+  @HelpMessage("Use JShell as the REPL (default for pure-Java projects). Requires JDK >= 9.")
+  @Name("jsh")
+    jshell: Option[Boolean] = None,
 
   @Group(HelpGroup.Repl.toString)
-  @Tag(tags.restricted)
-  @HelpMessage(s"Set the Ammonite version (${Constants.ammoniteVersion} by default)")
-  @Name("ammoniteVer")
+  @Tag(tags.implementation)
   @Tag(tags.inShortHelp)
-    ammoniteVersion: Option[String] = None,
-
-  @Group(HelpGroup.Repl.toString)
-  @Name("a")
-  @Tag(tags.restricted)
-  @Tag(tags.inShortHelp)
-  @HelpMessage("Provide arguments for ammonite repl")
-  @Hidden
-    ammoniteArg: List[String] = Nil,
+  @ValueDescription("path")
+  @HelpMessage("Read the REPL init script (--repl-init-script) from a file. Mutually exclusive with --repl-init-script.")
+    replInitScriptFile: Option[String] = None,
 
   @Group(HelpGroup.Repl.toString)
   @Hidden

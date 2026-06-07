@@ -84,6 +84,9 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
   override def sharedOptions(options: PublishOptions): Option[SharedOptions] =
     Some(options.shared)
 
+  override def buildOptions(options: PublishOptions): Some[BuildOptions] =
+    Some(options.buildOptions().orExit(options.shared.logger))
+
   def mkBuildOptions(
     baseOptions: BuildOptions,
     sharedVersionOptions: SharedVersionOptions,
@@ -253,6 +256,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
       workingDir,
       ivy2HomeOpt,
       publishLocal = false,
+      m2Local = false,
+      m2HomeOpt = None,
       forceSigningExternally = options.signingCli.forceSigningExternally.getOrElse(false),
       parallelUpload = options.parallelUpload,
       options.watch.watch,
@@ -276,6 +281,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
     workingDir: => os.Path,
     ivy2HomeOpt: Option[os.Path],
     publishLocal: Boolean,
+    m2Local: Boolean = false,
+    m2HomeOpt: Option[os.Path] = None,
     forceSigningExternally: Boolean,
     parallelUpload: Option[Boolean],
     watch: Boolean,
@@ -306,6 +313,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
             workingDir = workingDir,
             ivy2HomeOpt = ivy2HomeOpt,
             publishLocal = publishLocal,
+            m2Local = m2Local,
+            m2HomeOpt = m2HomeOpt,
             logger = logger,
             allowExit = false,
             forceSigningExternally = forceSigningExternally,
@@ -339,6 +348,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
         workingDir = workingDir,
         ivy2HomeOpt = ivy2HomeOpt,
         publishLocal = publishLocal,
+        m2Local = m2Local,
+        m2HomeOpt = m2HomeOpt,
         logger = logger,
         allowExit = true,
         forceSigningExternally = forceSigningExternally,
@@ -360,6 +371,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
     workingDir: os.Path,
     ivy2HomeOpt: Option[os.Path],
     publishLocal: Boolean,
+    m2Local: Boolean,
+    m2HomeOpt: Option[os.Path],
     logger: Logger,
     allowExit: Boolean,
     forceSigningExternally: Boolean,
@@ -416,6 +429,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
               workingDir = workingDir,
               ivy2HomeOpt = ivy2HomeOpt,
               publishLocal = publishLocal,
+              m2Local = m2Local,
+              m2HomeOpt = m2HomeOpt,
               logger = logger,
               forceSigningExternally = forceSigningExternally,
               parallelUpload = parallelUpload,
@@ -563,13 +578,15 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
     val description = publishOptions.description.getOrElse(moduleName)
     logger.debug(s"Published project description: $description")
 
+    val pomProjectName = publishOptions.pomProjectNameForMaven(moduleName)
+
     val pomContent = Pom.create(
       organization = coursier.Organization(org),
       moduleName = coursier.ModuleName(moduleName),
       version = ver,
       packaging = None,
       url = url,
-      name = Some(moduleName), // ?
+      name = Some(pomProjectName),
       dependencies = dependencies,
       description = Some(description),
       license = license,
@@ -601,8 +618,12 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
       moduleName = coursier.ModuleName(moduleName),
       version = ver,
       url = url,
+      pomProjectName = Some(pomProjectName),
       dependencies = dependencies,
       description = Some(description),
+      license = license,
+      scm = scm,
+      developers = developers,
       time = LocalDateTime.ofInstant(now, ZoneOffset.UTC),
       hasDoc = docJarOpt.isDefined,
       hasSources = sourceJarOpt.isDefined
@@ -684,6 +705,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
     workingDir: os.Path,
     ivy2HomeOpt: Option[os.Path],
     publishLocal: Boolean,
+    m2Local: Boolean,
+    m2HomeOpt: Option[os.Path],
     logger: Logger,
     forceSigningExternally: Boolean,
     parallelUpload: Option[Boolean],
@@ -738,7 +761,8 @@ object Publish extends ScalaCommand[PublishOptions] with BuildCommandHelpers {
       lazy val es =
         Executors.newSingleThreadScheduledExecutor(Util.daemonThreadFactory("publish-retry"))
 
-      if publishLocal then RepoParams.ivy2Local(ivy2HomeOpt)
+      if publishLocal && m2Local then RepoParams.m2Local(m2HomeOpt)
+      else if publishLocal then RepoParams.ivy2Local(ivy2HomeOpt)
       else
         value {
           publishOptions.contextual(isCi).repository match {

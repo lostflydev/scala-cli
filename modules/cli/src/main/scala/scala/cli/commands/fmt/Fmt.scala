@@ -5,7 +5,7 @@ import caseapp.core.help.HelpFormat
 import dependency.*
 
 import scala.build.Logger
-import scala.build.input.{ProjectScalaFile, Script, SourceScalaFile}
+import scala.build.input.{ProjectScalaFile, SbtFile, Script, SourceScalaFile}
 import scala.build.internal.{Constants, ExternalBinaryParams, FetchExternalBinary, Runner}
 import scala.build.internals.ConsoleUtils.ScalaCliConsole.warnPrefix
 import scala.cli.CurrentParams
@@ -53,7 +53,7 @@ object Fmt extends ScalaCommand[FmtOptions] {
       if args.all.isEmpty then (Seq(os.pwd), os.pwd, None)
       else {
         val i = options.shared.inputs(args.all).orExit(logger)
-        type FormattableSourceFile = Script | SourceScalaFile | ProjectScalaFile
+        type FormattableSourceFile = Script | SourceScalaFile | ProjectScalaFile | SbtFile
         val s = i.sourceFiles().collect { case sc: FormattableSourceFile => sc.path }
         (s, i.workspace, Some(i))
       }
@@ -76,19 +76,29 @@ object Fmt extends ScalaCommand[FmtOptions] {
           case _                          => "default"
       }
 
-      val entry = {
-        val dialect       = ScalafmtDialect.fromString(dialectString)
-        val prevConfMaybe = pathMaybe.map(p => os.read(p))
-        scalafmtConfigWithFields(prevConfMaybe.getOrElse(""), Some(version), dialect)
-      }
-      val scalaFmtConfPath = {
-        val confFileName = ".scalafmt.conf"
-        val path         =
-          if (options.saveScalafmtConf) pathMaybe.getOrElse(workspace / confFileName)
-          else workspace / Constants.workspaceDirName / confFileName
-        os.write.over(path, entry, createFolders = true)
-        path
-      }
+      val dialect       = ScalafmtDialect.fromString(dialectString)
+      val prevConfMaybe = pathMaybe.map(os.read(_))
+      val entry = scalafmtConfigWithFields(prevConfMaybe.getOrElse(""), Some(version), dialect)
+
+      val confFileName            = ".scalafmt.conf"
+      val canUseDiscoveredInPlace =
+        !options.saveScalafmtConf
+        && options.scalafmtConfStr.isEmpty
+        && options.scalafmtConf.isEmpty
+        && pathMaybe.isDefined
+        && versionMaybe.isDefined
+        && dialectMaybe.isDefined
+        && options.scalafmtVersion.forall(versionMaybe.contains)
+        && options.scalafmtDialect.forall(dialectMaybe.contains)
+
+      val scalaFmtConfPath =
+        if canUseDiscoveredInPlace then pathMaybe.get
+        else
+          val path =
+            if options.saveScalafmtConf then pathMaybe.getOrElse(workspace / confFileName)
+            else workspace / Constants.workspaceDirName / confFileName
+          os.write.over(path, entry, createFolders = true)
+          path
 
       val fmtCommand = options.scalafmtLauncher.filter(_.nonEmpty) match {
         case Some(launcher) =>

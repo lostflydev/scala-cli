@@ -290,6 +290,12 @@ Set parameters for packaging
 
 `//> using packaging.graalvmArgs` _args_
 
+`//> using packaging.graalvmVersion` _graalvm-version_
+
+`//> using packaging.graalvmJavaVersion` _graalvm-java-version_
+
+`//> using packaging.graalvmJvmId` _graalvm-jvm-id_
+
 `//> using packaging.dockerFrom` _base-docker-image_
 
 `//> using packaging.dockerImageTag` _image-tag_
@@ -313,6 +319,12 @@ Set parameters for packaging
 `//> using packaging.provided org.apache.spark::spark-sql`
 
 `//> using packaging.graalvmArgs --no-fallback`
+
+`//> using packaging.graalvmVersion 17.0.9`
+
+`//> using packaging.graalvmJavaVersion 17`
+
+`//> using packaging.graalvmJvmId graalvm-java17:17.0.9`
 
 `//> using packaging.dockerFrom openjdk:11`
 
@@ -541,7 +553,7 @@ Add Scala Native options
 
 `//> using nativeLto full`
 
-`//> using nativeVersion 0.5.10`
+`//> using nativeVersion 0.5.12`
 
 `//> using nativeCompile -flto=thin`
 
@@ -635,7 +647,7 @@ Add Scala.js options
 
 
 #### Examples
-`//> using jsVersion 1.20.2`
+`//> using jsVersion 1.21.0`
 
 `//> using jsMode mode`
 
@@ -681,7 +693,7 @@ Set the test framework
 
 ### Toolkit
 
-Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 `//> using toolkit` _version_
 
@@ -689,11 +701,45 @@ Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for
 
 
 #### Examples
-`//> using toolkit 0.8.0`
+`//> using toolkit 0.9.2`
 
 `//> using toolkit default`
 
 `//> using test.toolkit default`
+
+### Wasm options
+
+Add WebAssembly options
+
+
+`//> using wasm` _true|false_
+
+`//> using wasm`
+
+`//> using jsRuntime` _node|deno|bun_
+
+
+#### Examples
+`//> using wasm`
+
+`//> using jsRuntime node`
+
+`//> using jsRuntime deno`
+
+`//> using jsRuntime bun`
+
+### Watch additional inputs
+
+Watch additional files or directories when using watch mode
+
+`//> using watching` _path_
+
+`//> using watching` _path1_ _path2_ …
+
+
+
+#### Examples
+`//> using watching ./data`
 
 
 ## target directives

@@ -9,6 +9,7 @@ import java.util
 import java.util.zip.ZipFile
 
 import scala.cli.integration.TestUtil.*
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 import scala.util.{Properties, Using}
 
@@ -1498,15 +1499,20 @@ abstract class PackageTestDefinitions extends ScalaCliSuite with TestScalaVersio
         }
       }
 
-      if (actualScalaVersion == Constants.scala3Next)
-        test(s"package ($packageDescription, --cross)") {
-          TestUtil.retryOnCi() {
+      if (actualScalaVersion == Constants.scala3Next) {
+        val crossScalaVersions =
+          Seq(actualScalaVersion, Constants.scala213, Constants.scala212)
+        val numberOfBuilds = crossScalaVersions.size
+        test(s"package ($packageDescription, --cross) produces $numberOfBuilds artifacts") {
+          TestUtil.retryOnCi(
+            maxAttempts = if packageDescription == "--native-image" then 5 else 3,
+            waitDuration = if packageDescription == "--native-image" then 15.seconds else 5.seconds
+          ) {
             val crossDirective =
-              s"//> using scala $actualScalaVersion ${Constants.scala213} ${Constants.scala212}"
-            val mainClass  = "TestScopeMain"
-            val mainFile   = s"$mainClass.scala"
-            val message    = "Hello"
-            val outputFile = mainClass + extension
+              s"//> using scala ${crossScalaVersions.mkString(" ")}"
+            val mainClass = "TestScopeMain"
+            val mainFile  = s"$mainClass.scala"
+            val message   = "Hello"
             TestInputs(
               os.rel / "Messages.scala" ->
                 s"""$crossDirective
@@ -1524,21 +1530,15 @@ abstract class PackageTestDefinitions extends ScalaCliSuite with TestScalaVersio
                 packageOpts
               )
                 .call(cwd = root)
-              val outputFilePath = root / outputFile
-              expect(os.isFile(outputFilePath))
-              val output =
-                if (packageDescription == libraryArg)
-                  os.proc(TestUtil.cli, "run", outputFilePath).call(cwd = root).out.trim()
-                else if (packageDescription == jsArg)
-                  os.proc(node, outputFilePath).call(cwd = root).out.trim()
-                else {
-                  expect(Files.isExecutable(outputFilePath.toNIO))
-                  TestUtil.maybeUseBash(outputFilePath)(cwd = root).out.trim()
-                }
-              expect(output == message)
+
+              crossScalaVersions.foreach { version =>
+                val outputFilePath = root / s"${mainClass}_$version$extension"
+                expect(os.isFile(outputFilePath))
+              }
             }
           }
         }
+      }
     }
   }
 
@@ -1563,4 +1563,67 @@ abstract class PackageTestDefinitions extends ScalaCliSuite with TestScalaVersio
         expect(res.out.trim().contains(s"$moduleName.js"))
       }
     }
+
+  if (!Properties.isMac || !TestUtil.isCI)
+    test("--watching with --watch re-packages on external file change") {
+      val sourceFile   = os.rel / "Main.scala"
+      val externalFile = os.rel / "data" / "input.txt"
+      TestInputs(
+        sourceFile ->
+          """object Main extends App {
+            |  println("Hello")
+            |}
+            |""".stripMargin,
+        externalFile -> "Hello"
+      ).fromRoot { root =>
+        TestUtil.withProcessWatching(
+          proc = os.proc(
+            TestUtil.cli,
+            "--power",
+            "package",
+            ".",
+            "--watch",
+            "--watching",
+            "data",
+            "-o",
+            "app",
+            extraOptions
+          )
+            .spawn(cwd = root, mergeErrIntoOut = true),
+          timeout = 120.seconds
+        ) { (proc, timeout, ec) =>
+          implicit val ec0  = ec
+          val initialOutput = proc.readOutputUntilWatchingMessage(timeout)
+          expect(initialOutput.exists(_.contains("Wrote")))
+
+          Thread.sleep(2000L)
+          os.write.over(root / externalFile, "World")
+
+          val rerunOutput = proc.readOutputUntilWatchingMessage(timeout)
+          expect(rerunOutput.nonEmpty)
+        }
+      }
+    }
+
+  test("sbt file in directory does not break package") {
+    val message = "Hello from package"
+    TestInputs(
+      os.rel / "Main.scala" ->
+        s"""object Main {
+           |  def main(args: Array[String]): Unit = println("$message")
+           |}
+           |""".stripMargin,
+      os.rel / "build.sbt" -> """name := "my-project""""
+    ).fromRoot { root =>
+      os.proc(TestUtil.cli, "--power", "package", extraOptions, ".").call(
+        cwd = root,
+        stdin = os.Inherit,
+        stdout = os.Inherit
+      )
+      val launcher = root / (if Properties.isWin then "Main.bat" else "Main")
+      expect(os.isFile(launcher))
+      val output = TestUtil.maybeUseBash(launcher)(cwd = root).out.trim()
+      expect(output == message)
+    }
+  }
 }

@@ -350,7 +350,7 @@ Add Scala Native options
 
 `//> using nativeLto full`
 
-`//> using nativeVersion 0.5.10`
+`//> using nativeVersion 0.5.12`
 
 `//> using nativeCompile -flto=thin`
 
@@ -429,7 +429,7 @@ Add Scala.js options
 
 
 #### Examples
-`//> using jsVersion 1.20.2`
+`//> using jsVersion 1.21.0`
 
 `//> using jsMode mode`
 
@@ -475,7 +475,7 @@ Set the test framework
 
 ### Toolkit
 
-Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 `//> using toolkit` _version_
 
@@ -483,7 +483,7 @@ Use a toolkit as dependency (not supported in Scala 2.12), 'default' version for
 
 
 #### Examples
-`//> using toolkit 0.8.0`
+`//> using toolkit 0.9.2`
 
 `//> using toolkit default`
 

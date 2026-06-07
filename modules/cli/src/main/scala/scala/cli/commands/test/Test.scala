@@ -12,7 +12,7 @@ import scala.build.errors.{BuildException, CompositeBuildException}
 import scala.build.internal.{Constants, Runner}
 import scala.build.internals.ConsoleUtils.ScalaCliConsole
 import scala.build.options.{BuildOptions, JavaOpt, Platform, Scope}
-import scala.build.testrunner.AsmTestRunner
+import scala.build.testrunner.{AsmTestRunner, Logger as TestRunnerLogger}
 import scala.cli.CurrentParams
 import scala.cli.commands.run.Run
 import scala.cli.commands.setupide.SetupIde
@@ -37,7 +37,7 @@ object Test extends ScalaCommand[TestOptions] {
 
   override def buildOptions(opts: TestOptions): Option[BuildOptions] = Some {
     import opts.*
-    val baseOptions = shared.buildOptions().orExit(opts.shared.logger)
+    val baseOptions = shared.buildOptions(watchOptions = watch).orExit(opts.shared.logger)
     baseOptions.copy(
       javaOptions = baseOptions.javaOptions.copy(
         javaOpts =
@@ -210,14 +210,19 @@ object Test extends ScalaCommand[TestOptions] {
             esModule
           ) { js =>
             Runner.testJs(
-              build.fullClassPath.map(_.toNIO),
-              js.toIO,
-              requireTests,
-              args,
-              predefinedTestFrameworks.map(_.value),
-              logger,
-              build.options.scalaJsOptions.dom.getOrElse(false),
-              esModule
+              classPath = build.fullClassPath.map(_.toNIO),
+              entrypoint = js.toIO,
+              requireTests = requireTests,
+              args = args,
+              predefinedTestFrameworks = predefinedTestFrameworks.map(_.value),
+              logger = logger,
+              jsDom = build.options.scalaJsOptions.dom.getOrElse(false),
+              esModule = esModule,
+              scalaBinaryVersion = build.scalaParams.map(_.scalaBinaryVersion).getOrElse("3"),
+              platformSuffix = build.scalaParams.flatMap(_.platform).getOrElse("sjs1"),
+              userDeclaredDepNames =
+                build.options.classPathOptions.allExtraDependencies.toSeq.iterator
+                  .map(_.value.name).toSet
             )
           }.flatten
         }
@@ -229,12 +234,17 @@ object Test extends ScalaCommand[TestOptions] {
             logger
           ) { launcher =>
             Runner.testNative(
-              build.fullClassPath.map(_.toNIO),
-              launcher.toIO,
-              predefinedTestFrameworks.map(_.value),
-              requireTests,
-              args,
-              logger
+              classPath = build.fullClassPath.map(_.toNIO),
+              launcher = launcher.toIO,
+              predefinedTestFrameworks = predefinedTestFrameworks.map(_.value),
+              requireTests = requireTests,
+              args = args,
+              logger = logger,
+              scalaBinaryVersion = build.scalaParams.map(_.scalaBinaryVersion).getOrElse("3"),
+              platformSuffix = build.scalaParams.flatMap(_.platform).getOrElse("native0.5"),
+              userDeclaredDepNames =
+                build.options.classPathOptions.allExtraDependencies.toSeq.iterator
+                  .map(_.value.name).toSet
             )
           }.flatten
         }
@@ -256,11 +266,16 @@ object Test extends ScalaCommand[TestOptions] {
             testOnly.map(to => s"--test-only=$to").toSeq ++
             Seq("--") ++ args
 
+        val testRunnerMainClass =
+          if build.artifacts.hasJavaTestRunner
+          then Constants.javaTestRunnerMainClass
+          else Constants.testRunnerMainClass
+
         Runner.runJvm(
           build.options.javaHome().value.javaCommand,
           build.options.javaOptions.javaOpts.toSeq.map(_.value.value),
           classPath,
-          Constants.testRunnerMainClass,
+          testRunnerMainClass,
           extraArgs,
           logger,
           allowExecve = allowExecve
@@ -274,7 +289,8 @@ object Test extends ScalaCommand[TestOptions] {
     // https://github.com/VirtusLab/scala-cli/issues/426
     if classPath0.exists(_.contains("zio-test")) && !classPath0.exists(_.contains("zio-test-sbt"))
     then {
-      val parentInspector = new AsmTestRunner.ParentInspector(classPath)
+      val parentInspector =
+        new AsmTestRunner.ParentInspector(classPath, TestRunnerLogger(logger.verbosity))
       Runner.frameworkNames(classPath, parentInspector, logger) match {
         case Right(f) => f.headOption
         case Left(_)  =>

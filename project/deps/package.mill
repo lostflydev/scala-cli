@@ -19,10 +19,10 @@ object Scala {
   def scala3Lts        = s"$scala3LtsPrefix.7"  // the LTS version currently used in the build
   def runnerScala3     = scala3Lts
   def scala3NextPrefix = "3.8"
-  def scala3Next       = s"$scala3NextPrefix.2" // the newest/next version of Scala
-  def scala3NextAnnounced   = scala3Next  // the newest/next version of Scala that's been announced
-  def scala3NextRc          = "3.8.3-RC1" // the latest RC version of Scala Next
-  def scala3NextRcAnnounced = "3.8.2-RC3" // the latest announced RC version of Scala Next
+  def scala3Next       = s"$scala3NextPrefix.3" // the newest/next version of Scala
+  def scala3NextAnnounced   = s"$scala3NextPrefix.2"  // the newest/next version of Scala that's been announced
+  def scala3NextRc          = "3.8.4-RC3" // the latest RC version of Scala Next
+  def scala3NextRcAnnounced = "3.8.4-RC2" // the latest announced RC version of Scala Next
 
   // The Scala version used to build the CLI itself.
   def defaultInternal = sys.props.get("scala.version.internal").getOrElse(scala3Lts)
@@ -45,7 +45,7 @@ object Scala {
   val scala3MainVersions  = (defaults ++ allScala3).distinct
   val runnerScalaVersions = (Seq(runnerScala3) ++ scala3MainVersions).distinct
 
-  def scalaJs    = "1.20.2"
+  def scalaJs    = "1.21.0"
   def scalaJsCli = scalaJs // this must be compatible with the Scala.js version
 
   private def patchVer(sv: String): Int =
@@ -85,12 +85,6 @@ object Scala {
       .distinct
       .filter(minorVer(_) < minorVer(scala3Lts))
 
-  def maxAmmoniteScala212Version                    = "2.12.21"
-  def maxAmmoniteScala213Version                    = "2.13.18"
-  def maxAmmoniteScala3Version                      = "3.8.1"
-  def maxAmmoniteScala3LtsVersion                   = "3.3.7"
-  lazy val listMaxAmmoniteScalaVersion: Seq[String] =
-    Seq(maxAmmoniteScala212Version, maxAmmoniteScala213Version, maxAmmoniteScala3Version)
 }
 
 object Java {
@@ -105,7 +99,7 @@ object Java {
     defaultJava,
     minimumJavaLauncherJava
   ).distinct
-  def mainJavaVersions: Seq[Int] = Seq(8, 11, 17, 21, 23, 24, 25)
+  def mainJavaVersions: Seq[Int] = Seq(8, 11, 17, 21, 23, 24, 25, 26)
   def allJavaVersions: Seq[Int]  = (mainJavaVersions ++ cliKeyJavaVersions).distinct
 }
 
@@ -120,52 +114,45 @@ object TestDeps {
 
 object Deps {
   object Versions {
-    def ammonite             = "3.0.8"
-    def ammoniteForScala3Lts = ammonite
     def argonautShapeless    = "1.3.1"
     // jni-utils version may need to be sync-ed when bumping the coursier version
-    def coursierDefault                   = "2.1.25-M23"
+    def coursierDefault                   = "2.1.25-M25"
     def coursier                          = coursierDefault
     def coursierCli                       = coursierDefault
     def coursierPublish                   = "0.4.4"
     def jmh                               = "1.37"
-    def jsoniterScala                     = "2.38.8"
-    def jsoup                             = "1.22.1"
-    def scalaMeta                         = "4.15.2"
-    def scalafmt                          = "3.10.7"
+    def jsoniterScala                     = "2.38.14"
+    def jsoup                             = "1.22.2"
+    def scalaMeta                         = "4.17.0"
+    def scalafmt                          = "3.11.1"
     def scalaNative04                     = "0.4.17"
-    def scalaNative05                     = "0.5.10"
+    def scalaNative05                     = "0.5.12"
     def scalaNative                       = scalaNative05
     def maxScalaNativeForToolkit          = scalaNative05
-    def maxScalaNativeForTypelevelToolkit = scalaNative04
+    def maxScalaNativeForTypelevelToolkit = scalaNative05
     def maxScalaNativeForScalaPy          = scalaNative04
     def maxScalaNativeForMillExport       = scalaNative05
-    def scalaPackager                     = "0.2.1"
+    def scalaPackager                     = "0.2.2"
     def signingCli                        = "0.2.13"
     def signingCliJvmVersion              = Java.defaultJava
-    def javaSemanticdb                    = "0.10.0"
+    def javaSemanticdb                    = "0.12.3"
     def javaClassName                     = "0.1.9"
-    def bloop                             = "2.0.19"
-    def sbtVersion                        = "1.12.4"
+    def bloop                             = "2.1.0"
+    def sbtVersion                        = "1.12.5"
     def mill012Version                    = "0.12.17"
     def mill1Version                      = BuildInfo.millVersion
     def mavenVersion                      = "3.8.1"
-    def mavenScalaCompilerPluginVersion   = "4.9.1"
+    def mavenScalaCompilerPluginVersion   = "4.9.10"
     def mavenExecPluginVersion            = "3.3.0"
     def mavenAppArtifactId                = "maven-app"
     def mavenAppGroupId                   = "com.example"
     def mavenAppVersion                   = "0.1-SNAPSHOT"
-    def scalafix                          = "0.14.5"
+    def scalafix                          = "0.14.6"
   }
 
-  // DO NOT hardcode a Scala version in this dependency string
-  // This dependency is used to ensure that Ammonite is available for Scala versions
-  // that Scala CLI supports.
-  def ammonite             = mvn"com.lihaoyi:::ammonite:${Versions.ammonite}"
-  def ammoniteForScala3Lts = mvn"com.lihaoyi:::ammonite:${Versions.ammoniteForScala3Lts}"
   def argonautShapeless    =
     mvn"com.github.alexarchambault:argonaut-shapeless_6.3_2.13:${Versions.argonautShapeless}"
-  def asm = mvn"org.ow2.asm:asm:9.9.1"
+  def asm = mvn"org.ow2.asm:asm:9.10.1"
   // Force using of 2.13 - is there a better way?
   def bloopConfig = mvn"ch.epfl.scala:bloop-config_2.13:2.3.3"
     .exclude(("com.github.plokhotnyuk.jsoniter-scala", "jsoniter-scala-core_2.13"))
@@ -193,7 +180,7 @@ object Deps {
   def expecty       = mvn"com.eed3si9n.expecty::expecty:0.17.1"
   def fansi         = mvn"com.lihaoyi::fansi:0.5.1"
   def giter8        = mvn"org.foundweekends.giter8:giter8:0.18.0"
-  def guava         = mvn"com.google.guava:guava:33.5.0-jre"
+  def guava         = mvn"com.google.guava:guava:33.6.0-jre"
   def javaClassName =
     mvn"org.virtuslab.scala-cli.java-class-name:java-class-name_3:${Versions.javaClassName}"
       .exclude(
@@ -201,7 +188,7 @@ object Deps {
         "org.jline" -> "jline-terminal",
         "org.jline" -> "jline-terminal-jna"
       )
-  def jgit                 = mvn"org.eclipse.jgit:org.eclipse.jgit:7.5.0.202512021534-r"
+  def jgit                 = mvn"org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r"
   def jimfs                = mvn"com.google.jimfs:jimfs:1.3.1"
   def jmhGeneratorBytecode = mvn"org.openjdk.jmh:jmh-generator-bytecode:${Versions.jmh}"
   def jmhCore              = mvn"org.openjdk.jmh:jmh-core:${Versions.jmh}"
@@ -213,13 +200,13 @@ object Deps {
   def jsoup              = mvn"org.jsoup:jsoup:${Versions.jsoup}"
   def libsodiumjni       = mvn"org.virtuslab.scala-cli:libsodiumjni:0.0.4"
   def metaconfigTypesafe =
-    mvn"org.scalameta::metaconfig-typesafe-config:0.18.2"
+    mvn"org.scalameta::metaconfig-typesafe-config:0.18.6"
       .exclude(("org.scala-lang", "scala-compiler"))
-  def munit              = mvn"org.scalameta::munit:1.2.2"
+  def munit              = mvn"org.scalameta::munit:1.3.0"
   def nativeTestRunner   = mvn"org.scala-native::test-runner:${Versions.scalaNative}"
   def nativeTools        = mvn"org.scala-native::tools:${Versions.scalaNative}"
   def osLib              = mvn"com.lihaoyi::os-lib:0.11.8"
-  def pprint             = mvn"com.lihaoyi::pprint:0.9.5"
+  def pprint             = mvn"com.lihaoyi::pprint:0.9.6"
   def pythonInterface    = mvn"io.github.alexarchambault.python:interface:0.1.0"
   def pythonNativeLibs   = mvn"ai.kien::python-native-libs:0.2.5"
   def scalac(sv: String) = mvn"org.scala-lang:scala-compiler:$sv"
@@ -233,7 +220,7 @@ object Deps {
       .exclude("org.scala-js" -> "scalajs-env-nodejs_2.13")
       .exclude("org.scala-js" -> "scalajs-js-envs_2.13")
   // Force using of 2.13 - is there a better way?
-  def scalaJsEnvNodeJs = mvn"org.scala-js::scalajs-env-nodejs:1.5.0"
+  def scalaJsEnvNodeJs = mvn"org.scala-js::scalajs-env-nodejs:1.6.0"
   def scalaJsLogging   = mvn"org.scala-js::scalajs-logging:1.2.0"
   // Force using of 2.13 - is there a better way?
   def scalaJsTestAdapter = mvn"org.scala-js:scalajs-sbt-test-adapter_2.13:${Scala.scalaJs}"
@@ -274,14 +261,13 @@ object Deps {
   def svm                       = mvn"org.graalvm.nativeimage:svm:$graalSvmVersion"
   def swoval                    = mvn"com.swoval:file-tree-views:2.1.12"
   def testInterface             = mvn"org.scala-sbt:test-interface:1.0"
-  val toolkitVersion            = "0.8.0"
+  val toolkitVersion            = "0.9.2"
   val toolkitVersionForNative04 = "0.3.0"
   val toolkitVersionForNative05 = toolkitVersion
   def toolkit                   = mvn"org.scala-lang:toolkit:$toolkitVersion"
   def toolkitTest               = mvn"org.scala-lang:toolkit-test:$toolkitVersion"
-  val typelevelToolkitVersion   = "0.1.29"
+  val typelevelToolkitVersion   = "0.2.0"
   def typelevelToolkit          = mvn"org.typelevel:toolkit:$typelevelToolkitVersion"
-  def usingDirectives           = mvn"org.virtuslab:using_directives:1.1.4"
   // Lives at https://github.com/VirtusLab/no-crc32-zip-input-stream, see #865
   // This provides a ZipInputStream that doesn't verify CRC32 checksums, that users
   // can enable by setting SCALA_CLI_VENDORED_ZIS=true in the environment, to workaround

@@ -92,7 +92,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -134,7 +134,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -178,7 +178,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -432,7 +432,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -636,19 +636,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 </details>
 
@@ -674,6 +696,7 @@ Available keys:
   - httpProxy.address                              HTTP proxy address.
   - httpProxy.password                             HTTP proxy password (used for authentication).
   - httpProxy.user                                 HTTP proxy user (used for authentication).
+  - ide.auto-setup                                 Globally controls whether the BSP configuration in `.bsp/` is generated automatically by build commands. Enabled by default.
   - interactive                                    Globally enables interactive mode (the '--interactive' flag).
   - interactive-was-suggested                      Setting indicating if the global interactive mode was already suggested.
   - java.properties                                Java properties for Scala CLI's execution.
@@ -693,6 +716,7 @@ Available keys:
   - suppress-warning.directives-in-multiple-files  Globally suppresses warnings about directives declared in multiple source files.
   - suppress-warning.experimental-features         Globally suppresses warnings about experimental features.
   - suppress-warning.outdated-dependencies-files   Globally suppresses warnings about outdated dependencies.
+  - test.deprecated-key                            Deprecated test key (internal, do not use).
 
 For detailed documentation refer to our website: https://scala-cli.virtuslab.org/docs/commands/config
 
@@ -883,7 +907,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -937,7 +961,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -981,7 +1005,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -1223,7 +1247,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -1427,19 +1451,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 </details>
 
@@ -1450,7 +1496,7 @@ Exclude sources
 
 Aliases: `console`
 
-Fire-up a Scala REPL.
+Fire-up a REPL (Scala REPL by default, JShell for pure-Java projects).
 
 The entire Scala CLI project's classpath is loaded to the repl.
 
@@ -1492,7 +1538,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -1540,7 +1586,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -1584,7 +1630,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -1832,7 +1878,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -2036,13 +2082,19 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
@@ -2050,11 +2102,37 @@ Aliases: `--toolkit`
 
 Exclude sources
 
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
+
 **--java-prop-option**
 
 Add java properties. Note that options equal `-Dproperty=value` are assumed to be java properties and don't require to be passed after `--java-prop`.
 
 Aliases: `--java-prop`
+
+**--jshell**
+
+Use JShell as the REPL (default for pure-Java projects). Requires JDK >= 9.
+
+Aliases: `--jsh`
+
+**--repl-init-script-file**
+
+Read the REPL init script (--repl-init-script) from a file. Mutually exclusive with --repl-init-script.
 
 **--repl-dry-run**
 
@@ -2115,7 +2193,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -2169,7 +2247,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -2213,7 +2291,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -2471,7 +2549,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -2675,19 +2753,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--java-prop-option**
 
@@ -2763,7 +2863,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -2817,7 +2917,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -2861,7 +2961,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -3119,7 +3219,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -3323,19 +3423,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--java-prop-option**
 
@@ -3399,7 +3521,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -3441,7 +3563,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -3485,7 +3607,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -3725,7 +3847,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -3929,19 +4051,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--respect-project-filters**
 
@@ -3997,7 +4141,7 @@ Aliases: `--dialect`
 
 **--scalafmt-version**
 
-Pass scalafmt version before running it (3.10.7 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
+Pass scalafmt version before running it (3.11.1 by default). If passed, this overrides whatever value is configured in the .scalafmt.conf file.
 
 Aliases: `--fmt-version`
 
@@ -4008,11 +4152,11 @@ Aliases: `--fmt-version`
 ## `test` command
 **SHOULD have for Scala Runner specification.**
 
-Compile and test Scala code.
+Compile and test Scala (or Java) code.
 
 Test sources are compiled separately (after the 'main' sources), and may use different dependencies, compiler options, and other configurations.
 A source file is treated as a test source if:
-  - the file name ends with `.test.scala`
+  - the file name ends with `.test.scala` or `.test.java`
   - the file comes from a directory that is provided as input, and the relative path from that file to its original directory contains a `test` directory
   - it contains the `//> using target.scope test` directive (Experimental)
 
@@ -4054,7 +4198,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -4102,7 +4246,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -4146,7 +4290,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -4409,7 +4553,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -4613,19 +4757,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--java-prop-option**
 
@@ -4781,7 +4947,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -4823,7 +4989,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -4867,7 +5033,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -5103,7 +5269,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -5307,19 +5473,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--json-options**
 
@@ -5758,7 +5946,7 @@ Aliases: `-P` ,`--plugin`
 
 **--scala-version**
 
-Set the Scala version (3.8.2 by default)
+Set the Scala version (3.8.3 by default)
 
 Aliases: `-S` ,`--scala`
 
@@ -5800,7 +5988,7 @@ Enable Scala.js. To show more options for Scala.js pass `--help-js`
 
 **--js-version**
 
-The Scala.js version (1.20.2 by default).
+The Scala.js version (1.21.0 by default).
 
 **--js-mode**
 
@@ -5844,7 +6032,7 @@ Enable Scala Native. To show more options for Scala Native pass `--help-native`
 
 **--native-version**
 
-Set the Scala Native version (0.5.10 by default).
+Set the Scala Native version (0.5.12 by default).
 
 **--native-mode**
 
@@ -6080,7 +6268,7 @@ Path to the Scala.js linker
 
 **--js-cli-version**
 
-Scala.js CLI version to use for linking (1.20.2 by default).
+Scala.js CLI version to use for linking (1.21.0 by default).
 
 **--js-cli-java-arg**
 
@@ -6284,19 +6472,41 @@ Show options for Scalafmt
 
 Aliases: `--help-fmt` ,`--scalafmt-help` ,`--fmt-help`
 
+**--help-wasm**
+
+Show options for WebAssembly
+
+Aliases: `--wasm-help`
+
 **--strict-bloop-json-check**
 
 
 
 **--with-toolkit**
 
-Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.8.0, 'default' version for typelevel toolkit: 0.1.29
+Add toolkit to classPath (not supported in Scala 2.12), 'default' version for Scala toolkit: 0.9.2, 'default' version for typelevel toolkit: 0.2.0
 
 Aliases: `--toolkit`
 
 **--exclude**
 
 Exclude sources
+
+**--auto-setup-ide**
+
+Automatically generate BSP configuration in `.bsp/` when running build commands. Enabled by default.
+
+Aliases: `--auto-setup-bsp`
+
+**--deprecated-test-option**
+
+Deprecated test option (internal, do not use)
+
+**--deprecated-test-alias-option**
+
+Option with deprecated alias (internal, do not use)
+
+Aliases: `--deprecated-test-alias`
 
 **--bsp-directory**
 

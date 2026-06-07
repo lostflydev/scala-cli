@@ -17,6 +17,7 @@ import scala.build.errors.*
 import scala.build.input.*
 import scala.build.internal.resource.ResourceMapper
 import scala.build.internal.{Constants, MainClass, Name, Util}
+import scala.build.internals.ConsoleUtils.ScalaCliConsole.warnPrefix
 import scala.build.options.*
 import scala.build.options.validation.ValidationException
 import scala.build.postprocessing.*
@@ -302,7 +303,10 @@ object Build {
             workspace = inputs.workspace,
             updateSemanticDbs = true,
             scalaVersion = sv,
-            buildOptions = build.options
+            buildOptions =
+              inputs.originalWorkspaceOpt.fold(build.options)(
+                build.options.withResolvedSemanticDbSourceRoot
+              )
           ).left.foreach(_.foreach(logger.message(_)))
       case _ =>
     }
@@ -791,6 +795,7 @@ object Build {
     def doWatch(): Unit = either {
       val (crossSources: CrossSources, inputs0: Inputs) =
         value(allInputs(inputs, options, logger))
+      val mergedOptions          = crossSources.sharedOptions(options)
       val elements: Seq[Element] =
         if res == null then inputs0.elements
         else
@@ -851,6 +856,17 @@ object Build {
         watcher0.register(artifact.toNIO, depth)
         watcher0.addObserver(onChangeBufferedObserver(_ => watcher.schedule()))
       }
+
+      val extraWatchPaths = mergedOptions.watchOptions.extraWatchPaths.distinct
+      for (extraPath <- extraWatchPaths)
+        if os.exists(extraPath) then {
+          val depth    = if os.isFile(extraPath) then -1 else Int.MaxValue
+          val watcher0 = watcher.newWatcher()
+          watcher0.register(extraPath.toNIO, depth)
+          watcher0.addObserver(onChangeBufferedObserver(_ => watcher.schedule()))
+        }
+        else
+          logger.message(s"$warnPrefix provided watched path doesn't exist: $extraPath")
     }
 
     try doWatch()
@@ -929,7 +945,8 @@ object Build {
       options.scalaOptions.semanticDbOptions.generateSemanticDbs.getOrElse(false)
     val semanticDbTargetRoot = options.scalaOptions.semanticDbOptions.semanticDbTargetRoot
     val semanticDbSourceRoot =
-      options.scalaOptions.semanticDbOptions.semanticDbSourceRoot.getOrElse(inputs.workspace)
+      options.scalaOptions.semanticDbOptions.semanticDbSourceRoot
+        .getOrElse(inputs.originalWorkspaceOpt.getOrElse(inputs.workspace))
 
     val scalaCompilerParamsOpt = artifacts.scalaOpt match {
       case Some(scalaArtifacts) =>
@@ -1092,8 +1109,7 @@ object Build {
     either {
 
       val options0 =
-        // FIXME: don't add Scala to pure Java test builds (need to add pure Java test runner)
-        if sources.hasJava && !sources.hasScala && scope != Scope.Test
+        if sources.hasJava && !sources.hasScala
         then
           options.copy(
             scalaOptions = options.scalaOptions.copy(
@@ -1183,6 +1199,24 @@ object Build {
         compiler = compiler,
         logger = logger,
         buildClient = buildClient
+      )
+    }
+
+    if sources.hasJava && sources.hasScala && options.useBuildServer.contains(false) then {
+      val javaPaths = sources.paths
+        .filter(_._1.last.endsWith(".java"))
+        .map(_._1.toString) ++
+        sources.inMemory
+          .filter(_.generatedRelPath.last.endsWith(".java"))
+          .map(_.originalPath.fold(identity, _._2.toString))
+      val javaPathsList =
+        javaPaths.map(p => s"  $p").mkString(System.lineSeparator())
+      logger.message(
+        s"""$warnPrefix With ${Console.BOLD}--server=false${Console.RESET}, .java files are not compiled to .class files.
+           |scalac parses .java sources for type information (cross-compilation), but without the build server (Bloop/Zinc) nothing compiles them to bytecode.
+           |Affected .java files:
+           |$javaPathsList
+           |Remove --server=false or compile Java files separately to avoid runtime NoClassDefFoundError.""".stripMargin
       )
     }
 
